@@ -10,7 +10,7 @@
 做四件事：
     1. 校验 token（真的打一次 Telegram 的 getMe）
     2. 往 cmd_config.json 的 platform 列表里加一条 telegram 机器人
-    3. 可选：设 ID 白名单（★强烈建议，不然任何人在 Telegram 上都能跟你的小九聊天）
+    3. 可选：设 ID 白名单（★强烈建议，不然任何人在 Telegram 上都能跟你的助手聊天）
     4. 可选：设 HTTP 代理（如果直连不通）
 
 用法：
@@ -34,7 +34,7 @@ from safe_write import write_bytes, write_text
 
 console_utf8()   # GBK 控制台下的兜底，见 console_utf8.py
 
-ROOT = Path(r"E:\本地ai\AstrBotData")
+ROOT = Path(r"C:\LocalAI-Assistant\AstrBotData")
 CFG = ROOT / "data" / "cmd_config.json"
 BOT_ID = "telegram_main"
 
@@ -222,7 +222,7 @@ def main() -> int:
         wl = ps.get("id_whitelist") or []
         if not wl:
             print("\n[!] 警告：ID 白名单是空的 —— 任何人在 Telegram 上找到这个机器人，")
-            print("    都能跟你的小九聊天（而且它是不审查的）。")
+            print("    都能跟你的助手聊天（而且它是不审查的）。")
             print("    强烈建议加白名单：")
             print("      1. 在 Telegram 里找 @userinfobot，发任意消息，它会回你的数字 ID")
             print("      2. python add_telegram_bot.py --token <token> --allow <你的ID>")

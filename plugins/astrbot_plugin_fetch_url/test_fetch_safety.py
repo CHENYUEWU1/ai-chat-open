@@ -45,7 +45,7 @@ try:
 except ModuleNotFoundError as exc:      # bs4 / httpx 只有 AstrBot 自带的那套 python 有
     print(f"  [i] 跳过：当前解释器缺依赖（{exc.name}）。")
     print("      用 AstrBot 自带的 python 跑：")
-    print(r"      E:\本地ai\AstrBot\AstrBot_4.28.1_windows_amd64_portable\backend\python\python.exe \ ")
+    print(r"      C:\LocalAI-Assistant\AstrBot\AstrBot_4.28.1_windows_amd64_portable\backend\python\python.exe \ ")
     print(r"        plugins\astrbot_plugin_fetch_url\test_fetch_safety.py")
     sys.exit(0)
 

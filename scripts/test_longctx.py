@@ -14,7 +14,7 @@ from console_utf8 import console_utf8
 console_utf8()   # GBK 控制台下打印 ✅/❌ 会崩，见 console_utf8.py
 
 API = "http://127.0.0.1:11434/api/chat"
-MODEL = os.environ.get("XIAOJIU_MODEL", "xiaojiu9b:latest")
+MODEL = os.environ.get("LOCAL_ASSISTANT_MODEL", "local-assistant-9b:latest")
 
 FILLER = (
     "这是一段用于测试长上下文记忆的填充文本。"
@@ -36,7 +36,7 @@ def ask(text: str):
         "stream": False,
         "think": False,
         "messages": [
-            {"role": "system", "content": "你是小九，简洁回答，只给答案。"},
+            {"role": "system", "content": "你是助手，简洁回答，只给答案。"},
             {"role": "user", "content": text + "\n\n问题：我家的 WiFi 密码是什么？只回答密码本身。"},
         ],
     }

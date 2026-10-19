@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-把 personas/ 目录下的人格文件应用到 Cherry Studio 的助手「小九」。
+把 personas/ 目录下的人格文件应用到 Cherry Studio 的助手「助手」。
 
 用法：
-    python apply_persona.py 示例人格Y   # 不加 .txt
+    python apply_persona.py 病娇-助手-露骨   # 不加 .txt
     python apply_persona.py --list           # 列出可用人格
     python apply_persona.py --current        # 显示当前人格
 
@@ -17,8 +17,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-DB = Path(r"E:\本地ai\CherryStudio\data\Data\cherrystudio.sqlite")
-PDIR = Path(r"E:\本地ai\personas")
+DB = Path(r"C:\LocalAI-Assistant\CherryStudio\data\Data\cherrystudio.sqlite")
+PDIR = Path(r"C:\LocalAI-Assistant\personas")
 
 
 def list_personas():

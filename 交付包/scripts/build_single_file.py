@@ -24,17 +24,7 @@ from safe_write import write_text
 console_utf8()   # GBK 控制台下打印 ✅/❌ 会崩，见 console_utf8.py
 
 _args = [a for a in sys.argv[1:] if not a.startswith("--")]
-
-
-def find_project_root(start: Path) -> Path:
-    for parent in (start, *start.parents):
-        if (parent / "启动AstrBot.bat").is_file():
-            return parent
-    return Path(__file__).resolve().parent
-
-
-ROOT = find_project_root(Path(__file__).resolve().parent)
-PKG = Path(_args[0]).resolve() if _args else ROOT / "交付包"
+PKG = Path(_args[0]) if _args else Path(r"C:\LocalAI-Assistant\交付包")
 
 # 工程文档都在这个子文件夹里（由 organize_package.py 分栏）
 AIDIR = "给AI看的"
@@ -44,7 +34,7 @@ AIDIR = "给AI看的"
 OUT = PKG / AIDIR / "单文件版-全内容.md"
 
 # 当前启用的人格记在项目根的 personas\.active（不进包，所以单独指个绝对路径）
-ACTIVE_FILE = ROOT / "personas" / ".active"
+ACTIVE_FILE = Path(r"C:\LocalAI-Assistant\personas\.active")
 
 # (章标题, 源文件) —— 路径相对 交付包\
 CHAPTERS = [
@@ -200,7 +190,7 @@ def cut_for_eng(fname: str, body: str) -> str:
 # ⚠️ 按**行首**匹配（用 re.M）—— 因为 02 的技术踩坑档案里会**引用**
 #    `## 五、人格文件格式` 当例子解释"工程版砍了什么"（那行以 `-` 开头），
 #    子串匹配会把这种合法引用误判成泄漏，天天报假警 → 人就不看校验了。
-ENG_FORBIDDEN = (r"^#{1,3} 五、人格文件格式", r"^【你是谁】", r"^【用户个人资料】",
+ENG_FORBIDDEN = (r"^#{1,3} 五、人格文件格式", r"^【你是谁】", r"^【关于陈雅雾】",
                  r"^【⭐ 说话方式", r"^【⭐ 进阶内容", r"^【进阶玩法",
                  r"^【硬约束】", r"^【输出格式】")
 # 只是"提醒"，不作为失败条件（技术语境下可能合法出现）。
@@ -295,7 +285,7 @@ def verify_eng(text: str) -> int:
         print("   多半是 CUT_FROM / ENG_SCRUB_FILES 的匹配又失效了（见文件头注释）")
         return 1
     # ⚠️ 先把行内代码（`` `...` ``）挖掉再数 —— 人格**文件名**是合法出现的
-    #    （`示例人格X` 这种），而文件名里的词会天天误报。
+    #    （`病娇-助手-异物` 这种），而文件名里的词会天天误报。
     #    误报的后果很具体：看多了就干脆不看校验输出了，等于没校验
     #    （ENG_SMELL 上面那段注释已经为「射 / 裸」踩过一次同样的坑）。
     #
@@ -303,11 +293,11 @@ def verify_eng(text: str) -> int:
     #    `re.sub(r"`[^`]*`", "", text)` 时，`[^`]` 是**能跨行**的，
     #    于是只要文档里任何一处反引号不配对（markdown 里很常见），
     #    **后面所有反引号的配对就整体错开一格** —— 本该被剥掉的
-    #    `示例人格X` 反而露出来被算成"成人向措辞"。
+    #    `病娇-助手-异物` 反而露出来被算成"成人向措辞"。
     #    行内代码按定义不跨行，所以逐行剥既更准、也不受全局配对影响。
     #
     # ⚠️ 还要先整段挖掉 **围栏代码块**（``` ... ```）——
-    #    里面是真实路径 / JSON / 命令（`--persona 示例人格X`、
+    #    里面是真实路径 / JSON / 命令（`--persona 病娇-助手-异物`、
     #    `personas\_源文件\玩法-进阶示例.txt`），**必须原样出现**，
     #    不算"描述性提及"。行首的 ``` 才当围栏（行内反引号不受影响）。
     no_fence = re.sub(r"^```.*?^```", "", text, flags=re.S | re.M)
@@ -334,12 +324,12 @@ def main() -> int:
     stamp = datetime.now().strftime("%Y-%m-%d")
     if eng:
         out = [
-            "# 本地 AI 助手「小九」· 工程档案（单文件版 · **工程版**）",
+            "# 本地 AI 助手「助手」· 工程档案（单文件版 · **工程版**）",
             "",
             "> ⭐ **这一份是给「接手迭代的 AI 窗口」的** —— "
             "**已剔除人格正文与其写作示例**，只留工程内容。",
             "> 用它接手，就不会因为内容问题卡住；打包、改配置、排错、写文档都能正常干。",
-            f"> 打包时间：{stamp} ｜ 原始项目目录：项目根目录",
+            f"> 打包时间：{stamp} ｜ 原始项目目录：`E:\\本地ai\\`",
             "",
             "**包含**：⭐给 AI 的完整说明书 → 状态快照 → 总入口 → 系统总览 → "
             "技术踩坑档案 → 文件与脚本说明（不含第五节）→ AI 迭代交接 → "
@@ -361,13 +351,13 @@ def main() -> int:
         ]
     else:
         out = [
-            "# 本地 AI 助手「小九」· 完整交付档案（单文件版）",
+            "# 本地 AI 助手「助手」· 完整交付档案（单文件版）",
             "",
             "> 本文件由交付包内所有文档 + 人格 + 配置合并而成，"
             "**可直接整体上传给 AI 用于接手迭代**。",
             "> ⚠️ 里面**含人格正文和成人向写作示例** —— "
             "只想让 AI 干工程活，请改用 `单文件版-工程版.md`（已剔除这些内容，不易被拒答）。",
-            f"> 打包时间：{stamp} ｜ 原始项目目录：项目根目录",
+            f"> 打包时间：{stamp} ｜ 原始项目目录：`E:\\本地ai\\`",
             "",
             "**包含**：⭐给 AI 的完整说明书 → 状态快照 → 总入口 → 系统总览 → "
             "技术踩坑档案 → 文件与脚本说明 → AI 迭代交接 → AstrBot 界面 → 全部人格 → 模型定义",
@@ -407,7 +397,7 @@ def main() -> int:
         out += ["---", "", "# 附录 A · 人格文件（{} 套，可直接编辑复用）".format(len(plist)), ""]
         out += ["修改后双击项目根的 `切换人格.bat` 即可应用（`scripts\\切换人格.bat` 在交付包里；"
                 "Cherry 时期的 `apply_persona.py` 已归档、跑不了）。"
-                "⚠️ 人格文件可能包含个人资料；公开分享前请先检查并删除敏感内容。", ""]
+                "⚠️ 里面含用户的真实姓名，对外分享前先删掉。", ""]
         for fname, mark in plist:
             p = PKG / "personas" / fname
             if not p.exists():
@@ -421,9 +411,9 @@ def main() -> int:
     # ---- 附录 B：模型定义 ----
     # ⚠️ 工程版**只放当前在用的那份**。
     #    `Modelfile.assistant` 是已删除的 4B 模型留下的历史文件，
-    #    里面还带着旧版的大段 SYSTEM（可能含用户个人资料），
+    #    里面还带着老的大段 SYSTEM（含【关于陈雅雾】这类小节），
     #    放进"给 AI 看的干净版"里既没用、又会让新窗口看到人格式内容。
-    #    实测踩过：校验直接报出个人资料标题 / `【输出格式】` 就来自它。
+    #    实测踩过：校验直接报出 `【关于陈雅雾】` / `【输出格式】` 就来自它。
     #
     # ⚠️ 2026-09-29 修：这里原来硬编码 `Modelfile.assistant-9b`，
     #    而**当前在用的是 35B**（`astrbot_setup.MODELS["35b"]` → `Modelfile.assistant-35b`）

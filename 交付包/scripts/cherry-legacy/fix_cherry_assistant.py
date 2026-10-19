@@ -4,7 +4,7 @@
 把 Cherry Studio 的助手从云端模型改绑到本地模型（9B）。
 
 ⚠️ 默认**不动提示词** —— 人格由 apply_persona.py 单独管理，别互相覆盖。
-   只有加 --with-prompt 才会写入 personas/默认-小九.txt（用于全新重建）。
+   只有加 --with-prompt 才会写入 personas/默认-助手.txt（用于全新重建）。
 
 用法：
     python fix_cherry_assistant.py                 # 只绑模型 + 设上下文
@@ -16,11 +16,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-DB = Path(r"E:\本地ai\CherryStudio\data\Data\cherrystudio.sqlite")
-LOCAL_MODEL = "ollama::xiaojiu9b:latest"
+DB = Path(r"C:\LocalAI-Assistant\CherryStudio\data\Data\cherrystudio.sqlite")
+LOCAL_MODEL = "ollama::local-assistant-9b:latest"
 CLOUD_MODEL = "cherryai::qwen"
 CTX = 32768
-PERSONA = Path(r"E:\本地ai\personas\默认-小九.txt")
+PERSONA = Path(r"C:\LocalAI-Assistant\personas\默认-助手.txt")
 
 def load_default_persona() -> str:
     """从 personas/ 读默认人格，避免这里再维护第二份副本。"""
@@ -60,13 +60,13 @@ def main() -> int:
         p = load_default_persona()
         if p:
             c.execute("UPDATE assistant SET name = ?, model_id = ?, prompt = ?",
-                      ("小九", LOCAL_MODEL, p))
+                      ("助手", LOCAL_MODEL, p))
             print(f"\n✅ 已更新 {c.rowcount} 行助手（含提示词 {len(p)} 字符）")
         else:
-            c.execute("UPDATE assistant SET name = ?, model_id = ?", ("小九", LOCAL_MODEL))
+            c.execute("UPDATE assistant SET name = ?, model_id = ?", ("助手", LOCAL_MODEL))
             print(f"\n✅ 已更新 {c.rowcount} 行助手（提示词未动）")
     else:
-        c.execute("UPDATE assistant SET name = ?, model_id = ?", ("小九", LOCAL_MODEL))
+        c.execute("UPDATE assistant SET name = ?, model_id = ?", ("助手", LOCAL_MODEL))
         print(f"\n✅ 已更新 {c.rowcount} 行助手，提示词**保持不变**")
         print("   （要写默认人格请加 --with-prompt；要换人格用 apply_persona.py）")
 

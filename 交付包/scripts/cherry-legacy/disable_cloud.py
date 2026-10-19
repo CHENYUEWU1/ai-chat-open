@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-DB = Path(r"E:\本地ai\CherryStudio\data\Data\cherrystudio.sqlite")
+DB = Path(r"C:\LocalAI-Assistant\CherryStudio\data\Data\cherrystudio.sqlite")
 
 # 要关闭的云端提供者
 CLOUD_PROVIDERS = ("cherryai", "cherryai-subscription")

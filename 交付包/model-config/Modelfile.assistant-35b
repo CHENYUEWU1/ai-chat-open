@@ -1,4 +1,4 @@
-FROM E:\本地ai\downloads\Qwen3.6-35B-A3B-Uncensored-IQ2_M.gguf
+FROM C:\LocalAI-Assistant\downloads\Qwen3.6-35B-A3B-Uncensored-IQ2_M.gguf
 
 # ============================================================
 # 第二套模型：Qwen3.6-35B-A3B（无审查 / abliteration）
@@ -13,7 +13,7 @@ FROM E:\本地ai\downloads\Qwen3.6-35B-A3B-Uncensored-IQ2_M.gguf
 #   本模型 IQ2_M = 10.86 GB，本机池子约 15.5 GB（6.4 显存 + 9.1 内存），
 #   预计落在 26~35 秒/条。用户已确认可接受。
 #
-#   ⚠️ 与 xiaojiu9b（9B）并存，**不覆盖**，双击 切换人格.bat 那种方式
+#   ⚠️ 与 local-assistant-9b（9B）并存，**不覆盖**，双击 切换人格.bat 那种方式
 #      切换不了模型 —— 换模型要改 astrbot_setup.py 里的 MODEL_ID，
 #      或直接在 WebUI 的模型列表里选。老模型仍在，随时可换回。
 # ============================================================

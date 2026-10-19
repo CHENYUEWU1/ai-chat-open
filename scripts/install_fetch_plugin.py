@@ -30,15 +30,15 @@ PLUGIN_NAME = "astrbot_plugin_fetch_url"
 HERE = Path(__file__).resolve().parent
 
 # 插件源码在哪。这个脚本有两个位置：
-#   ① 项目根  E:\本地ai\install_fetch_plugin.py        → 源码在同级 plugins\
-#   ② 交付包  E:\本地ai\交付包\scripts\install_fetch_plugin.py → 源码在同级 ..\plugins\
+#   ① 项目根  C:\LocalAI-Assistant\install_fetch_plugin.py        → 源码在同级 plugins\
+#   ② 交付包  C:\LocalAI-Assistant\交付包\scripts\install_fetch_plugin.py → 源码在同级 ..\plugins\
 # 两个位置都试，别写死一个 —— 写死会让另一个位置直接报"找不到源码"。
 SRC_CANDIDATES = (
     HERE / "plugins" / PLUGIN_NAME,
     HERE.parent / "plugins" / PLUGIN_NAME,
 )
 
-DST = Path(r"E:\本地ai\AstrBotData\data\plugins") / PLUGIN_NAME
+DST = Path(r"C:\LocalAI-Assistant\AstrBotData\data\plugins") / PLUGIN_NAME
 
 # 装哪些文件。`test_fetch_safety.py` 不是运行时必需的，但一起装过去有个好处：
 # 现场就能用它验证"装进去的那份"没被改坏（2026-10-03 加 —— 之前漏装，

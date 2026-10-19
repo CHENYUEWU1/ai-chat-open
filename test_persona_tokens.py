@@ -12,7 +12,7 @@ r"""
 
 用法：
     python test_persona_tokens.py              # 量 personas\ 里全部
-    python test_persona_tokens.py 示例人格Y   # 只量指定几份
+    python test_persona_tokens.py 病娇-助手-露骨   # 只量指定几份
     python test_persona_tokens.py --ratio       # 额外打印 tok/字符
 
 原理：
@@ -34,8 +34,8 @@ console_utf8()   # 中文 Windows 控制台是 GBK，见 console_utf8.py
 
 from ollama_guard import chat_raw, ensure_alive   # noqa: E402
 
-PERSONAS = Path(r"E:\本地ai\personas")
-MODEL = "xiaojiu9b:latest"
+PERSONAS = Path(r"C:\LocalAI-Assistant\personas")
+MODEL = "local-assistant-9b:latest"
 CHAT_TIMEOUT = 60.0   # 量 token 只需要生成 1 个 token，60 秒足够（含加载）
 WINDOW = 32768        # 只用来算"占几成"，不往请求里传（原因见 probe()）
 OVERHEAD = 23         # 聊天模板 + 那句"你好"的固定开销（实测，不是推的）

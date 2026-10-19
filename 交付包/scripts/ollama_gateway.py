@@ -23,9 +23,9 @@ r"""
 
 排错（2026-10-05 加）：每次请求都会往 `_备份\gateway.log` 记一行"形状" ——
 谁、用什么路径、User-Agent、结果几号，外加聊天请求的 model/stream/条数。
-**不记口令内容、消息正文或搜索原词**，所以这份日志更适合用于排错和分享。
+**不记口令内容、不记消息正文**（搜索词会记），所以这份日志可以直接贴出来问人。
 "手机端连不上 / 输出一串代码"这类问题，就看这个文件里那条请求到底长什么样：
-    Get-Content E:\本地ai\_备份\gateway.log -Tail 30
+    Get-Content C:\LocalAI-Assistant\_备份\gateway.log -Tail 30
 换路径用 `--log-file`，彻底不写用 `--no-log`。
 
 客户端怎么填（自己设备上）：
@@ -89,13 +89,13 @@ try:
 except ModuleNotFoundError:
     pass
 
-TOKEN_FILE = Path(r"E:\本地ai\_备份\ollama网关口令.txt")
+TOKEN_FILE = Path(r"C:\LocalAI-Assistant\_备份\ollama网关口令.txt")
 # 请求日志（2026-10-05 加，见 ReqLog 的说明）。放 `_备份\`：那儿已被 .gitignore 排除。
-DEFAULT_LOG = Path(r"E:\本地ai\_备份\gateway.log")
+DEFAULT_LOG = Path(r"C:\LocalAI-Assistant\_备份\gateway.log")
 # 人格正文目录（自带网页的"人格"下拉用；**只读**）。
 # 2026-10-05 加：用户要"手机上的网页版也能选人格"。⚠️ 正文**不是随便给的** ——
 # 见 `_handle` 里 `/__persona` 那条：本机可以直接读，别的设备必须带上正确的 Key。
-PERSONAS_DIR = Path(r"E:\本地ai\personas")
+PERSONAS_DIR = Path(r"C:\LocalAI-Assistant\personas")
 
 # 允许转发的接口：(路径, 是否允许 GET, 是否允许 POST, 说明)
 ALLOW = {
@@ -293,13 +293,15 @@ def render_plain(ok_msg: str = "") -> str:
     return render_plain_page(sys_stats(), ok_msg)
 
 
-# 手机 App 安装包：默认从项目下的 `apk/` 提供，也可通过环境变量指定目录。
-# 网关只读 APK 目录，不往里写。
-# 手机上传的文件保存在项目下的 `聊天文件/`。
+# 手机 App 安装包（2026-10-06 加）：手机浏览器点一下就能下载安装（不用数据线、不用传文件）。
+# ⚠️ 2026-10-06 用户要求：**App 的东西要和本地 AI 部署分开**（别塞在 `C:\LocalAI-Assistant\` 里）
+# ⇒ 产物目录放在**独立目录** `E:\手机客户端App\out`（源码 `src\`、工具链 `tools\` 也都在那，
+# 全是 ASCII 路径，免得编译工具链吃中文/空格出幺蛾子）。网关只**读**这个目录，不往里写。
+# ⚠️ 2026-10-18 加：手机上传的文件落这儿（用户要求："我把回复的文件发给电脑端"）。
 # 只做**落地**，不自动处理；大小上限 25 MB；文件名做净化（去掉路径分隔符与控制字符）✓
-CHAT_FILES_DIR = Path(r"E:\本地ai\聊天文件")
+CHAT_FILES_DIR = Path(r"C:\LocalAI-Assistant\聊天文件")
 CHAT_FILES_MAX = 25 * 1024 * 1024
-APK_DIR = Path(os.environ.get("LOCAL_AI_APK_DIR", str(Path(__file__).resolve().parent / "apk"))).expanduser()
+APK_DIR = Path(r"E:\手机客户端App\out")
 
 
 def apk_info():
@@ -337,7 +339,7 @@ def apk_zip_bytes(info: dict) -> bytes:
     return zpath.read_bytes()
 
 # 手机授权码（2026-10-05 加）：在电脑上生成一个 4 位码，手机填一次，服务端给手机种一个 cookie
-# ⇒ 之后手机上的「停止小九」表单**不用再填 Key**（39 位口令在手机上敲太痛苦，实测他敲不动）。
+# ⇒ 之后手机上的「停止模型」表单**不用再填 Key**（39 位口令在手机上敲太痛苦，实测他敲不动）。
 _TICKETS: dict = {}
 TICKET_TTL = 600                 # 10 分钟有效
 COOKIE_NAME = "gw_stop"
@@ -372,10 +374,10 @@ def use_ticket(code: str) -> bool:
 #   资源数据 / 模型清单 / **人格清单**，还能**白用模型**（默认不强制 Key）。
 # 这里把"控制台那套路径"（`/`、`/plain`、`/__*`）关起来，**API（`/v1/*`、`/api/*`）不动**
 #   —— 手机 App 走的是 API 那条线，不受影响；要连 API 也强制，用原来的 `--require-key`。
-# ⚠️ 与「停止小九」的 4 位码**是两套东西**：
+# ⚠️ 与「停止模型」的 4 位码**是两套东西**：
 #   · 那个：一次性、10 分钟、只为"停服务"这一次动作（`_TICKETS`）；
 #   · 这个：长期通行证，输一次种一年 cookie，**换码即全部失效**（见 `access_cookie_value`）。
-ACCESS_FILE = Path(r"E:\本地ai\_备份\网关访问码.txt")
+ACCESS_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关访问码.txt")
 
 # ── 思考模式开关（2026-10-08 加，用户要求"手机上也能切"）──────────────
 #
@@ -393,7 +395,7 @@ ACCESS_FILE = Path(r"E:\本地ai\_备份\网关访问码.txt")
 # 三种改法：① 启动加 `--think auto|off|on`（`--allow-think` 等价于 auto）
 #          ② 自带网页上的「🧠 思考模式」按钮（手机也能点）
 #          ③ 删掉这个文件 = 回到 auto
-THINK_FILE = Path(r"E:\本地ai\_备份\网关思考模式.txt")
+THINK_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关思考模式.txt")
 THINK_MODES = ("auto", "off", "on", "local")
 THINK_MODE = "auto"                    # 默认 auto
 LAST_ASTRBOT_SYNC = ""                 # 最近一次同步 AstrBot 的结果（网页上显示）：客户端说了听客户端的，没说就关（= 以前的行为）
@@ -403,13 +405,13 @@ THINK_LABEL = {"auto": "自动 —— 客户端自己带的思考设置优先；
                "local": "本地思考 —— 先在本机想一遍（过程不外发），只把正式回复发出去"}
 # 「本地思考」的过程写到哪儿（只在本机；`_备份\` 已被 .gitignore 排除）
 LOCAL_KEEP_ALIVE = "30m"        # local 档给模型的保温时长（见下面 _local_think 开头的说明）
-WARM_MODEL_FILE = Path(r"E:\本地ai\_备份\预热模型.txt")   # 网页上选的"开机预热哪个模型"
-DEFAULT_WARM_MODEL = "qwen36-35b-uncensored:latest"
+WARM_MODEL_FILE = Path(r"C:\LocalAI-Assistant\_备份\预热模型.txt")   # 网页上选的"开机预热哪个模型"
+DEFAULT_WARM_MODEL = "local-assistant-35b:latest"
 _WARM_STATE = {"busy": False, "model": "", "t": 0.0, "ok": None, "secs": 0.0}
 _LOCAL_FALLBACK = ""            # local 档上次为什么退回普通单轮（页面上显示出来）
 
 
-TEMPERATURE_FILE = Path(r"E:\本地ai\_备份\网关温度.txt")
+TEMPERATURE_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关温度.txt")
 TEMPERATURE_CHOICES = ("auto", "0.2", "0.7", "1.0")   # auto = 不动客户端给的温度
 TEMPERATURE_DEFAULT = "auto"
 
@@ -442,7 +444,7 @@ def save_temperature(v: str) -> str:
 # 工具开关（2026-10-18 加）：`on`=保留客户端带来的 tools，`off`=**剥掉**（客户端就退回纯聊天）。
 # 为什么要有它：实测同一提示，不带 tools 出 349 字、带 tools 只出 32 字前言 + finish_reason=tool_calls
 # ⇒ 用户看到的"回复越来越短、最后半句截断"，就是模型把正文换成了工具调用。
-TOOLS_FILE = Path(r"E:\本地ai\_备份\网关工具开关.txt")
+TOOLS_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关工具开关.txt")
 TOOLS_CHOICES = ("on", "off")
 TOOLS_DEFAULT = "on"
 
@@ -469,7 +471,7 @@ def save_tools(v: str) -> str:
         sys.stderr.write(f"  [工具开关] 写设置失败：{type(e).__name__}\n")
     return "on" if tools_on() else "off"
 
-STRIP_FILE = Path(r"E:\本地ai\_备份\网关长度消毒.txt")
+STRIP_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关长度消毒.txt")
 STRIP_CHOICES = ("on", "off")
 STRIP_DEFAULT = "on"
 
@@ -498,7 +500,7 @@ def save_strip_limit(v: str) -> str:
     return "on" if strip_limit_on() else "off"
 
 
-LOCAL_BUDGET_FILE = Path(r"E:\本地ai\_备份\本地思考预算.txt")
+LOCAL_BUDGET_FILE = Path(r"C:\LocalAI-Assistant\_备份\本地思考预算.txt")
 LOCAL_BUDGET_DEFAULT = 800          # 默认第一轮思考预算（网页上可改）
 LOCAL_BUDGET_CHOICES = (300, 400, 600, 800, 1200)
 
@@ -580,9 +582,9 @@ def _warm_worker(model: str) -> None:
     finally:
         _WARM_STATE["busy"] = False
         sys.stderr.flush()
-THOUGHT_LOG = Path(r"E:\本地ai\_备份\思考过程.log")
+THOUGHT_LOG = Path(r"C:\LocalAI-Assistant\_备份\思考过程.log")
 THOUGHT_LOG_MAX = 2 * 1024 * 1024          # 超过 2 MB 就只留最近的（免得无限长）
-THOUGHT_REC_FILE = Path(r"E:\本地ai\_备份\思考过程记录.txt")
+THOUGHT_REC_FILE = Path(r"C:\LocalAI-Assistant\_备份\思考过程记录.txt")
 THOUGHT_REC = True                         # 要不要把过程写到磁盘（网页上可切）
 
 
@@ -623,7 +625,7 @@ def thought_log_info() -> str:
         return f"读不到（{type(e).__name__}）"
 # AstrBot 的思考开关（同一个概念的另一个地方）：它**启动时**读这个文件，
 # 所以网页上切档后要**重启 AstrBot** 才生效；auto 档不动它（让它按自己的设置走）。
-ASTRBOT_CFG = Path(r"E:\本地ai\AstrBotData\data\cmd_config.json")
+ASTRBOT_CFG = Path(r"C:\LocalAI-Assistant\AstrBotData\data\cmd_config.json")
 ASTRBOT_KEY = "ollama_disable_thinking"
 
 
@@ -839,7 +841,7 @@ def clear_access_fail(ip: str) -> None:
 #   · cookie 里放一个随机 token；服务端在 `_备份\网关授权设备.json` 里查它；
 #   · 于是能列出设备（IP / 浏览器 / 首次 / 最后活动）并**逐个解除**；
 #   · **入网码与已授权设备解耦**：换码只影响"还没进门的设备"，已授权的照旧。
-SESSION_FILE = Path(r"E:\本地ai\_备份\网关授权设备.json")
+SESSION_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关授权设备.json")
 _SESSIONS: dict = {}          # token -> {"ip","ua","first","last"}
 _SESS_LOADED = {"done": False}
 _SESS_DIRTY = {"t": 0.0}
@@ -1060,7 +1062,7 @@ def _is_broken_reply(m) -> bool:
 
 # 自动续写（2026-10-18 加）：模型偶发"半句就 EOS"（实测 `completion_tokens=67`、
 # finish_reason=stop、文本停在 `「异` 这种半个词上）⇒ 网关补一次"接着写完"再缝回去 ✓
-CONTINUE_FILE = Path(r"E:\本地ai\_备份\网关自动续写.txt")
+CONTINUE_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关自动续写.txt")
 CONTINUE_CHOICES = ("on", "off")
 CONTINUE_DEFAULT = "on"
 # 句末标点（落到这些字符上就算"说完了"，不再续写）
@@ -1094,7 +1096,7 @@ def save_continue(v: str) -> str:
 # 兼容模式（2026-10-18 加）：把整段回复**先收完 → 洗成纯文本 → 一次性发**。
 # 起因：用户那个客户端**不渲染 markdown**（`**` 原样显示），而且会在空行/表格处截断
 # （实测网关回了 120 字，屏幕只剩 17 字）。整段一次性发就没有"分块被吞"的问题 ✓
-COMPAT_FILE = Path(r"E:\本地ai\_备份\网关兼容模式.txt")
+COMPAT_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关兼容模式.txt")
 COMPAT_CHOICES = ("on", "off")
 COMPAT_DEFAULT = "off"
 
@@ -1106,7 +1108,7 @@ COMPAT_DEFAULT = "off"
 #     raw    逐字流式、一个字都不改（原 conpat=off）
 #     stream 边流边洗（默认，原 compat=on + streamsan=on）
 #     buffer 整段收完再洗再发（原 compat=on + streamsan=off）
-SENDMODE_FILE = Path(r"E:\本地ai\_备份\网关发送方式.txt")
+SENDMODE_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关发送方式.txt")
 SENDMODE_CHOICES = ("raw", "stream", "buffer")
 SENDMODE_LABEL = {"raw": "逐字原样", "stream": "边流边洗", "buffer": "整段洗好"}
 SENDMODE_TIP = {
@@ -1155,7 +1157,7 @@ def save_compat(v: str) -> str:
 
 # 历史净化开关（2026-10-18 加）：给"干活档"关掉用 —— 编码对话里短回复是正常的，
 # 不该被当成"退化连发"删掉 ✓
-HIST_FILE = Path(r"E:\本地ai\_备份\网关历史净化.txt")
+HIST_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关历史净化.txt")
 
 
 def hist_on() -> bool:
@@ -1221,8 +1223,8 @@ def current_preset() -> str:
         return "work"
     return "custom"
 
-MD_FILE = Path(r"E:\本地ai\_备份\网关去记号.txt")
-NL_FILE = Path(r"E:\本地ai\_备份\网关压空行.txt")
+MD_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关去记号.txt")
+NL_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关压空行.txt")
 
 
 def _flag_on(path: Path, default: bool = True) -> bool:
@@ -1335,7 +1337,7 @@ def switches_html() -> str:
                 "删掉 system 里「最多N个短句 / 控制在X-Y字」这类限制"),
     ])
 
-STREAMSAN_FILE = Path(r"E:\本地ai\_备份\网关流式洗文本.txt")
+STREAMSAN_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关流式洗文本.txt")
 
 
 def streamsan_on() -> bool:
@@ -2152,8 +2154,8 @@ def render_page(h=None) -> str:
 def kill_gateway_later(delay: float = 5.0) -> None:
     r"""**延迟结束网关自己**（以及任何别的 `ollama_gateway.py` 实例）。
 
-    用户 2026-10-05 的要求原话："我点停止小九，那个局域网那个也停了吧，
-    就是停止小九 5 秒后关闭关于小九的所有进程"。
+    用户 2026-10-05 的要求原话："我点停止模型，那个局域网那个也停了吧，
+    就是停止模型 5 秒后关闭关于助手的所有进程"。
 
     为什么延迟 5 秒：HTTP 响应要先发出去，页面才能把"已停止"显示给人看；
     立刻 `os._exit` 的话浏览器只会看到连接被重置（看起来像"点了没反应"）。
@@ -2182,8 +2184,8 @@ def kill_gateway_later(delay: float = 5.0) -> None:
     threading.Thread(target=go, daemon=True, name="kill-gateway").start()
 
 
-def stop_xiaojiu(dry: bool = False) -> list:
-    r"""把"小九"停下来 —— 干的事**和 `停止小九.bat` 一模一样**（三步）。
+def stop_local-assistant(dry: bool = False) -> list:
+    r"""把"助手"停下来 —— 干的事**和 `停止模型.bat` 一模一样**（三步）。
 
     顺序和理由照抄那个 .bat（`02` 坑 17 有实测）：
       1. `ollama.exe` —— 停推理服务，**释放显存**
@@ -2395,8 +2397,8 @@ class ReqLog:
 
     ⚠️ 两条纪律（这份日志是**可以直接贴给别人看**的）：
       1. **绝不记口令内容** —— 只记形状，如 `Key=Authorization Bearer(len=32)` / `Key=无`；
-      2. **不记消息正文或搜索原词** —— 只记条数/角色/有没有 system/是否流式，
-         搜索只记录触发方式与结果状态。
+      2. **不记消息正文** —— 只记条数/角色/有没有 system/是否流式；**搜索词会记**
+         （那是排错的关键：能立刻分辨"是不是只有加了「搜」才这样"）。
 
     超过 MAX 自动轮转一份 `.1`（只留一份，省地方）。
     """
@@ -2443,7 +2445,7 @@ class ReqLog:
 # ⚠️ 摘要提示词里**明确禁编造**，并要求保留"剧情推进 / 人物状态 / 承诺与设定 / 情绪基调"。
 SESSION_DEFAULT = "ip"          # 会话键：ip（默认）或 header:<名字>（客户端可用头区分会话）
 # 摘要模型解析不出来时的兜底（正常情况用"跟当前会话同一个模型"，见 --compress-model）
-DEFAULT_COMPRESS_MODEL = "xiaojiu9b:latest"
+DEFAULT_COMPRESS_MODEL = "local-assistant-9b:latest"
 COMPRESS_PROMPT = (
     "你是对话记录的压缩器。把下面的对话历史压缩成一段**简洁但信息完整**的中文摘要，"
     "供另一个 AI 继续对话时当作长期记忆使用。\n"
@@ -2980,7 +2982,8 @@ _PROTOCOL_PREFIXES = ("{system:", "system:", "[system", "{记忆", "{memory", "{
 def web_search(query: str, max_results: int = SEARCH_MAX) -> tuple:
     """搜一次。返回 `(给模型看的纯文本, 结果条数)`；失败抛 RuntimeError。
 
-    搜索词不会写入日志；条数一起返回，日志里只写 `结果N条` / `无结果`。
+    ⚠️ 2026-10-05 改：以前只返回文本，于是日志里只有"搜了什么"、**看不到"搜到没有"** ——
+    用户报"无法联网搜索内容"时无从判断。现在条数一起返回，日志里会写 `结果N条` / `无结果`。
     """
     payload = json.dumps({"query": query, "max_results": max_results,
                           "include_favicon": False}, ensure_ascii=False).encode("utf-8")
@@ -3082,7 +3085,7 @@ def auto_search_hit(text: str):
     return None
 
 
-# 「反说一半」（2026-10-05 晚加，默认开）：他手机客户端是**恋语（LianYu）** App，
+# 「反说一半」（2026-10-05 晚加，默认开）：他手机客户端是**手机客户端（手机客户端）** App，
 # 它的回复规则**硬编码**在源码里（`AiPromptBuilder.buildPersonaRules`）：
 #     「1. 长度：最少1句，最多5个短句。一次说的话不要长，控制在15-50字。」
 #     「4. 标点：允许用「？」「...」。」
@@ -3243,13 +3246,9 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "ollama-gateway/1.0"
     protocol_version = "HTTP/1.1"
 
-    # ---- 标准库日志：不格式化原始请求行，避免 query string 落盘 ----
+    # ---- 日志：**不打印口令**，路径按原样记 ----
     def log_message(self, fmt, *args):  # noqa: A003
-        try:
-            msg = fmt % args
-        except Exception:
-            msg = "HTTP 请求日志格式错误"
-        sys.stderr.write("  %s | %s\n" % (self.address_string(), msg[:180]))
+        sys.stderr.write("  %s | %s\n" % (self.address_string(), fmt % args))
 
     # ---- 「HTTPS 打到明文端口」这类错误：默认实现会把原始字节打成满屏乱码 ----
     # 2026-10-06 踩到：用户手机用 https:// 访问 11435，http.server 把 TLS 握手字节
@@ -3271,9 +3270,10 @@ class Handler(BaseHTTPRequestHandler):
             line = (f"⚠️ {who} 在用 HTTPS 访问本端口（本网关是明文 HTTP）"
                     f"⇒ 请把地址改成 http://…:11435 —— 已回 400，不影响别的客户端")
         elif "Bad request" in msg:
-            line = f"⚠️ {who} 发的不是合法 HTTP（已回 400）"
+            line = (f"⚠️ {who} 发的不是合法 HTTP（已回 400）："
+                    f"{msg.splitlines()[0][:120] if msg else 'Bad request'}")
         else:
-            line = f"⚠️ {who} HTTP 请求错误"
+            line = f"⚠️ {who} {msg.splitlines()[0][:160] if msg else 'error'}"
         sys.stderr.write("  " + line + "\n")       # 控制台只留一行
         self._log(line)                            # 详细那行进 gateway.log
 
@@ -3291,12 +3291,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
         except Exception:
             return
-        try:
-            method = getattr(self, "command", "") or "?"
-            target = urllib.parse.urlsplit(getattr(self, "path", "") or "").path or "/"
-            self.log_message('"%s %s" %s %s', method, target, str(code), str(size))
-        except Exception:
-            self.log_message("HTTP 请求结束，状态 %s", str(code))
+        super().log_request(code, size)
 
     def handle_one_request(self):  # noqa: N802
         r"""包一层：请求行不是 HTTP（最典型就是 TLS 握手）时，补一条**看得懂**的日志。
@@ -3445,7 +3440,7 @@ class Handler(BaseHTTPRequestHandler):
             st1, b1 = self._upstream_post(f"{self.server.ollama}/api/chat", p1)
             thought = self._extract_thought(b1, "/api/chat")
             if not thought:
-                # ⚠️ **静默退回**很坑（2026-10-08 实测被绕进去一次）：小模型（如 xiaojiu9b）
+                # ⚠️ **静默退回**很坑（2026-10-08 实测被绕进去一次）：小模型（如 local-assistant-9b）
                 # 根本不支持思考 ⇒ 第一轮不吐 reasoning ⇒ 这里退回普通单轮、**也不会写过程日志**。
                 # 所以必须留下痕迹：stderr + 请求备注 + 页面提示。
                 global _LOCAL_FALLBACK
@@ -3902,7 +3897,7 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def _do_upload(self) -> None:
-        r"""手机上传文件 ⇒ 存 `E:\本地ai\聊天文件\`（2026-10-18 加）。
+        r"""手机上传文件 ⇒ 存 `C:\LocalAI-Assistant\聊天文件\`（2026-10-18 加）。
 
         纯 HTML 表单（`enctype=multipart/form-data`）⇒ 手机上"会删脚本"的浏览器也能用 ✓
         只做落地：不解析、不喂模型；文件名净化 + 时间戳前缀（同名不覆盖）；
@@ -4301,8 +4296,7 @@ class Handler(BaseHTTPRequestHandler):
         # 于是"手机到底请求了什么"在日志里是一条两行的完整记录。
         self._reqinfo = {
             "method": method,
-            # 日志只留接口路径，不留 query string（可能带 API Key、搜索词或其他私密参数）。
-            "path": urllib.parse.urlsplit(self.path).path,
+            "path": self.path,
             "ip": self.client_address[0],
             "host": self.headers.get("Host") or "",
             "origin": self.headers.get("Origin") or "",
@@ -4330,7 +4324,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"last": LAST_REPLY, "recent": LAST_REPLIES} if LAST_REPLY
                            else {"note": "还没抓到回复（先让人发一条）", "recent": []})
             return
-        # ⚠️ 2026-10-18：手机上传文件（表单 POST multipart）⇒ 存 `E:\本地ai\聊天文件\` ✓
+        # ⚠️ 2026-10-18：手机上传文件（表单 POST multipart）⇒ 存 `C:\LocalAI-Assistant\聊天文件\` ✓
         if path == "/__upload":
             self._do_upload()
             return
@@ -4379,7 +4373,7 @@ class Handler(BaseHTTPRequestHandler):
                 if use_ticket(code):
                     cookie_hdr = (f"{COOKIE_NAME}={self.server.token}; Path=/; "
                                   f"Max-Age=2592000; SameSite=Lax")
-                    ok_msg = ("✅ 这台手机已授权（30 天内有效）：下面按「⏹ 停止小九」"
+                    ok_msg = ("✅ 这台手机已授权（30 天内有效）：下面按「⏹ 停止模型」"
                               "**不用再填 Key**。")
                     self.server.log("[授权码] 手机用 4 位码授权成功，已种 cookie")
                 else:
@@ -4478,7 +4472,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             code = new_ticket()
             self.server.log(f"[授权码] 生成了 {code}（{TICKET_TTL // 60} 分钟内有效，"
-                            f"在手机 /plain 页填它即可免 Key 停小九）")
+                            f"在手机 /plain 页填它即可免 Key 停助手）")
             self._json(200, {"code": code, "ttl": TICKET_TTL})
             return
         # 手机 App 安装包（自己编译出来的那份）。
@@ -4566,7 +4560,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
-        # 停止"小九"（＝ 停止小九.bat 那三步）。
+        # 停止"助手"（＝ 停止模型.bat 那三步）。
         # 这是唯一一个"会动你进程"的接口，不能让人在局域网里随手把服务停掉。
         # `?dry=1` 只看不杀。
         if path == "/__shutdown":
@@ -4602,7 +4596,7 @@ class Handler(BaseHTTPRequestHandler):
             if not (self._is_local() or self._has_correct_key() or form_ok or cookie_ok):
                 if is_form:
                     why = "表单里没填 Key，也没授权过这台手机" if not form_key else "填的 Key 不对"
-                    self.server.log(f"[停止小九]（表单）被拒：{why}")
+                    self.server.log(f"[停止模型]（表单）被拒：{why}")
                     self._html(403, "<h3>🔒 没能停：需要 Key 或授权</h3>"
                                     f"<p>{why}。</p>"
                                     "<p>两条路：① 在电脑上打开 "
@@ -4612,21 +4606,21 @@ class Handler(BaseHTTPRequestHandler):
                                     "<a href='/plain'>/plain</a> 页填一次，之后就不用再填了。</p>"
                                     "<p><a href='/plain'>← 回控制台</a></p>")
                 else:
-                    self._json(403, {"error": "停止小九需要先在页面上填好 Key（点「用这个 Key」），"
+                    self._json(403, {"error": "停止模型需要先在页面上填好 Key（点「用这个 Key」），"
                                               "或在电脑本机上操作"})
                 return
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             dry = form_dry or (q.get("dry") or ["0"])[0] in ("1", "true", "yes")
-            # 「连网关一起停」默认**开**（用户 2026-10-05 要的：点停止小九 ⇒ 5 秒后关掉所有小九进程）。
+            # 「连网关一起停」默认**开**（用户 2026-10-05 要的：点停止模型 ⇒ 5 秒后关掉所有助手进程）。
             # `?all=0` 或启动加 `--keep-gateway` 可以只停模型、把网关留着。
             all_ = (q.get("all") or ["1"])[0] not in ("0", "false", "no")
             if getattr(self.server, "keep_gateway", False):
                 all_ = False
-            res = stop_xiaojiu(dry=dry)
+            res = stop_local-assistant(dry=dry)
             if all_ and not dry:
                 kill_gateway_later()            # 5 秒后（响应先发出去）连网关一起关
                 res.append({"what": "网关（局域网 API · 本页）", "result": "5 秒后关闭"})
-            self.server.log(f"{'[演练]' if dry else '[停止小九]'}"
+            self.server.log(f"{'[演练]' if dry else '[停止模型]'}"
                             f"{'（表单）' if is_form else ''} " +
                             "；".join(f"{x['what']}={x['result']}" for x in res))
             tail = ("<p><b>网关（本页）也将在 5 秒后关闭</b> —— 这个页面随后会连不上。"
@@ -4833,7 +4827,7 @@ class Handler(BaseHTTPRequestHandler):
         # ---- 给客户端那条 system 末尾补东西（时间 / 反省略）----
         # ① **本机时间**（2026-10-05 加）：起因是用户在手机网页上问"几点了"，网关**去搜了**，
         #    可网上查不到"你的现在几点"，答出来是错的 ⇒ 时间必须由网关给（`02` 坑 19）。
-        # ② **反"说一半"**（2026-10-05 晚加，默认开）：他手机客户端是 **恋语（LianYu）**，
+        # ② **反"说一半"**（2026-10-05 晚加，默认开）：他手机客户端是 **手机客户端（手机客户端）**，
         #    那个 App 的回复规则**硬编码**了"最多 5 个短句 / 控制在 15-50 字"、
         #    还允许用「...」（`AiPromptBuilder.buildPersonaRules`），于是回复老是"说一半就省略"。
         #    那两条在 App 里改不了（UI 没这个开关），只能在**网关这一层压过去**：
@@ -4983,11 +4977,11 @@ class Handler(BaseHTTPRequestHandler):
                     query, why = search_query_of(text or "", self.server.search_mode,
                                                  self.server.inject_time)
                     if query:
-                        sys.stderr.write(f"  [搜索] 触发方式={why}\n")
+                        sys.stderr.write(f"  [搜索] {why}，查询={query!r}\n")
                         sys.stderr.flush()
                         payload["messages"], note = inject_search(
                             payload["messages"], query, explicit=(why == "触发词"))
-                        self._reqinfo["search"] = f"联网搜索[{why}] {note}"
+                        self._reqinfo["search"] = f"联网搜索[{why}] query={query!r} {note}"
                     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
         # ---- 「本地思考」两段式（2026-10-08 用户思路）----
@@ -5511,7 +5505,7 @@ def main() -> int:
                          "**不会**给整个进程设代理（否则转给本机 Ollama 的请求也会被塞进代理）")
     ap.add_argument("--no-fix-elision", action="store_true",
                     help="不补「把话说完、别用…省略」那条规则。默认**补** —— 手机客户端"
-                         "（恋语 App）源码里硬编码了「最多 5 个短句 / 15-50 字」，"
+                         "（手机客户端 App）源码里硬编码了「最多 5 个短句 / 15-50 字」，"
                          "表现就是回复「说一半就省略」（它 UI 里没有开关可改）")
     ap.add_argument("--no-inject-time", action="store_true",
                     help="不注入本机时间。默认**注入** —— 裸模型没有表，"
@@ -5563,7 +5557,7 @@ def main() -> int:
                     help=f"请求日志写哪（默认 {DEFAULT_LOG}；排错用 —— 不记口令、不记正文）")
     ap.add_argument("--no-log", action="store_true", help="完全不写请求日志")
     ap.add_argument("--keep-gateway", action="store_true",
-                    help="点「停止小九」时**只停模型/AstrBot，别把网关自己也关掉**。"
+                    help="点「停止模型」时**只停模型/AstrBot，别把网关自己也关掉**。"
                          "默认是「连网关一起停」：响应发出后 **5 秒**结束网关"
                          "（含其它 ollama_gateway 实例）—— 用户 2026-10-05 要的「所有进程都关」。"
                          "（要重新启动：电脑上双击 启动局域网API.bat）")
@@ -5584,7 +5578,7 @@ def main() -> int:
                     help="生成摘要用哪个模型。默认 same = **跟当前会话同一个模型** —— "
                          "8 GB 显存 + OLLAMA_MAX_LOADED_MODELS=1 下，用另一个模型做摘要会把"
                          "主模型整个踢出显存（`02` 坑 13），用户下一条要重付 20~40 秒冷启动。"
-                         "想强制用小模型：--compress-model xiaojiu9b:latest（那时就要接受换出）")
+                         "想强制用小模型：--compress-model local-assistant-9b:latest（那时就要接受换出）")
     ap.add_argument("--compress-cooldown", type=float, default=180.0,
                     help="同一个会话两次压缩之间至少隔多少秒（默认 180）")
     ap.add_argument("--compress-idle", type=float, default=5.0,
@@ -5594,7 +5588,7 @@ def main() -> int:
                     help="等空闲最多等这么久，超时照样压（默认 120；一直不压窗口会被吃满）")
     ap.add_argument("--session-header", default="",
                     help="用这个 HTTP 头区分会话（默认按来源 IP）")
-    ap.add_argument("--session-file", default=str(Path(r"E:\本地ai\_备份\gateway_sessions.json")),
+    ap.add_argument("--session-file", default=str(Path(r"C:\LocalAI-Assistant\_备份\gateway_sessions.json")),
                     help="会话记忆存哪（默认 _备份\\gateway_sessions.json）")
     args = ap.parse_args()
 
@@ -5682,7 +5676,7 @@ def main() -> int:
                f"时间注入={'关' if args.no_inject_time else '开'} | "
                f"反说一半={'关（--no-fix-elision）' if args.no_fix_elision else '开'} | "
                f"输出上限={'不兜底' if not args.num_predict else args.num_predict} | "
-               f"停止小九={'只停模型（--keep-gateway）' if args.keep_gateway else '连网关一起停(+5s)'} | "
+               f"停止模型={'只停模型（--keep-gateway）' if args.keep_gateway else '连网关一起停(+5s)'} | "
                f"记忆={'开' if srv.session_enabled else '**关**（默认）'} | "
                f"网页访问={'开放（--open-access）' if args.open_access else '**要授权码**'}")
     print("  Ollama 局域网网关已启动")

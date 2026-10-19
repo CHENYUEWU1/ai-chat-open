@@ -20,7 +20,7 @@ r"""两个本地模型的同人格对比实测（9B vs 35B）。
 
 用法：
     python compare_models.py 9b            # 只测 9B
-    E:\本地ai\ollama\ollama.exe stop xiaojiu9b:latest
+    C:\LocalAI-Assistant\ollama\ollama.exe stop local-assistant-9b:latest
     python compare_models.py 35b           # 再测 35B
 
 参数为什么不同（9B 0.7 / 35B 1.0）：那是两个模型各自 Modelfile 里的出厂推荐值，
@@ -41,7 +41,7 @@ from safe_write import read_text_raw, write_text
 # ⚠️ 2026-10-03：用户把人格改名/归档了（`示例角色E` → `不要看\历史版本\`，
 #    女版现在叫 `示例角色A`）。这里**从 personas\.active 读当前人格**，
 #    别再写死一个名字 —— 写死的话下次改名它又会指向一个不存在的文件。
-_PERSONAS = Path(r"E:\本地ai\personas")
+_PERSONAS = Path(r"C:\LocalAI-Assistant\personas")
 _ACTIVE = _PERSONAS / ".active"
 _name = (_ACTIVE.read_text(encoding="utf-8").strip() if _ACTIVE.exists() else "")
 PERSONA = _PERSONAS / f"{_name}.txt"
@@ -49,12 +49,12 @@ if not PERSONA.exists():
     raise SystemExit(f"[X] 读不到当前人格：{PERSONA}\n"
                      f"    先确认 personas\\.active 里写的是现存人格名")
 BASE = "http://127.0.0.1:11434/api/chat"
-OUT = Path(r"E:\本地ai\_备份\模型对比-原始输出.txt")
+OUT = Path(r"C:\LocalAI-Assistant\_备份\模型对比-原始输出.txt")
 
 # 各自的 Modelfile 参数（9B: temp 0.7 / 35B: temp 1.0，都是各自出厂推荐值）
 CFG = {
-    "9b":  ("xiaojiu9b:latest",              0.7),
-    "35b": ("qwen36-35b-uncensored:latest",  1.0),
+    "9b":  ("local-assistant-9b:latest",              0.7),
+    "35b": ("local-assistant-35b:latest",  1.0),
 }
 OPT = {"top_p": 0.95, "top_k": 20, "repeat_penalty": 1.15,
        "repeat_last_n": 1024, "num_predict": 300, "num_ctx": 32768}

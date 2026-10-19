@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-把 AstrBot Desktop 配成本地模型 + 小九人格 + 免密钥联网搜索。
+把 AstrBot Desktop 配成本地模型 + 助手人格 + 免密钥联网搜索。
 
 做五件事：
     1. 把 MODELS 表里的模型都建成并列提供商实例（**用哪个见下面"模型怎么选"**）
@@ -25,7 +25,7 @@
 用法：
     python astrbot_setup.py                  # 导入全部人格 + 应用当前选中的那份（模型=沿用配置里的）
     python astrbot_setup.py --list           # 列出所有可选人格
-    python astrbot_setup.py --persona 示例角色D        # 换人格并应用
+    python astrbot_setup.py --persona 外向-助手        # 换人格并应用
     python astrbot_setup.py --pick           # 交互式菜单选人格
     python astrbot_setup.py --models         # 列出可选模型（只读）
     python astrbot_setup.py --model 35b      # 换对话模型（人格保持不变）
@@ -55,10 +55,10 @@ console_utf8()   # 中文 Windows 控制台是 GBK，见 console_utf8.py
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(r"E:\本地ai\AstrBotData")
+ROOT = Path(r"C:\LocalAI-Assistant\AstrBotData")
 CFG = ROOT / "data" / "cmd_config.json"
 DB = ROOT / "data" / "data_v4.db"
-PERSONAS = Path(r"E:\本地ai\personas")
+PERSONAS = Path(r"C:\LocalAI-Assistant\personas")
 ACTIVE = PERSONAS / ".active"          # 一行文本，记录当前选的是哪份人格
 
 # ---------------------------------------------------------------- 模型表
@@ -88,10 +88,10 @@ ACTIVE = PERSONAS / ".active"          # 一行文本，记录当前选的是哪
 #      → 溢出部分 **Ollama 会自动挪给 CPU，不会 OOM**，只是速度略降。
 #      ⚠️ 前提是**内存有余量**（当天可用 6.5 GB）。内存吃紧就把它降回 32768/40960。
 MODELS: dict[str, tuple[str, str, str, int, int]] = {
-    "9b": ("ollama_xiaojiu9b", "xiaojiu9b:latest",
+    "9b": ("ollama_local-assistant-9b", "local-assistant-9b:latest",
            "老模型 Qwen3.5-9B-Uncensored · 快（实测 33.5 tok/s，350 字约 10 秒）",
            65536, 768),
-    "35b": ("ollama_qwen36_35b", "qwen36-35b-uncensored:latest",
+    "35b": ("ollama_local-assistant-35b", "local-assistant-35b:latest",
             "新模型 Qwen3.6-35B-A3B（MoE，每字激活 3B）· 更聪明、无审查 · "
             "代价是冷启动读提示慢（约 20~40 秒）",
             65536, 1024),
@@ -101,25 +101,25 @@ DEFAULT_MODEL = "9b"
 # 当前生效的模型（main() 里可能被 --model 覆盖，或沿用配置里已有的）
 MODEL_ID, MODEL_NAME, _, MODEL_NUM_CTX, MODEL_REPLY_RESERVE = MODELS[DEFAULT_MODEL]
 SOURCE_ID = "ollama"                   # provider_sources 里的源 id
-DEFAULT_PERSONA = "示例角色D"
-# ⚠️ 这个常量改过一次（2026-09-26）：原来是 "示例人格Y"，
+DEFAULT_PERSONA = "外向-助手"
+# ⚠️ 这个常量改过一次（2026-09-26）：原来是 "病娇-助手-露骨"，
 #    而它同时出现在"永远保护"名单里（`protected = set(names) | {DEFAULT_PERSONA} | ...`）——
-#    所以病娇 6 份被删后，`示例人格Y` 那条**库里记录永远清不掉**（实测：报了
-#    `[!] STALE_IDS 里的 '示例人格Y' 是现存人格，已跳过`，但磁盘上其实已经没这文件了）。
+#    所以病娇 6 份被删后，`病娇-助手-露骨` 那条**库里记录永远清不掉**（实测：报了
+#    `[!] STALE_IDS 里的 '病娇-助手-露骨' 是现存人格，已跳过`，但磁盘上其实已经没这文件了）。
 #    **换了 DEFAULT_PERSONA 之后要记得：它必须是一个真实存在的磁盘文件。**
 # 工具循环最大步数。AstrBot 默认 30 —— 对 9B 来说太多，
 # 实测它会一直搜/读不收敛。8 步足够"搜一次读两页再回答"。
 MAX_AGENT_STEPS = 8
-LEGACY_IDS = ("xiaojiu",)              # 早期版本用过的固定 persona_id，导入时清掉
+LEGACY_IDS = ("local-assistant",)              # 早期版本用过的固定 persona_id，导入时清掉
 # 已经从 personas\ 里删掉、但数据库里还留着旧记录的人格。
 # ⚠️ 只往里加【确实删掉的】，别加现存人格 —— 加了就是把人删掉。
-STALE_IDS = ("病娇-小九", "示例人格Y", "示例人格Y",
-    "示例人格X",
-    "示例人格Y",
-    "示例人格Y",
-    "示例人格Y",
-    "示例人格Y",
-    "示例人格Y",
+STALE_IDS = ("病娇-助手", "病娇-助手-狂化", "病娇-助手-全部",
+    "病娇-助手-异物",
+    "病娇-助手-玩",
+    "病娇-助手-露骨",
+    "病娇-助手-男-异物",
+    "病娇-助手-男-玩",
+    "病娇-助手-男-露骨",
     "测试",
 )
 
@@ -129,13 +129,13 @@ STALE_IDS = ("病娇-小九", "示例人格Y", "示例人格Y",
 #     tools = NULL  → 挂**全部**工具
 #     tools = []    → **一个都不挂**
 #
-# 为什么加这个：用户 2026-09-23 说"查资料我用不上，查资料就留外向小九"。
+# 为什么加这个：用户 2026-09-23 说"查资料我用不上，查资料就留外向助手"。
 # 实测过：只把人格里【关于查资料】那一节删掉**并不管用** ——
 # 工具定义还挂在人格上，问"今天天气"照样会调 web_search（5 个问题里 2 次）。
 # 要真的关掉，必须在这一层关。
 #
 # ⚠️ 用**前缀**而不是一个一个列名字 —— 人格会按玩法拆成好几份
-#    （示例人格Y / -异物 / -玩），列名字必然漏掉新的。
+#    （病娇-助手-露骨 / -异物 / -玩），列名字必然漏掉新的。
 #
 # ⚠️ 2026-09-26：病娇 6 份删掉之后，原来那个前缀**已经匹配不到任何现存人格**了 ——
 #    于是 7 份人格全部挂**全部工具**（`tools = None`）。
@@ -167,7 +167,7 @@ NO_TOOLS_NAMES = (
 #        模型不在 AstrBot 的内置元数据里 → 用 config.fallback_max_tokens
 #        而它的**默认值是 128000**
 #
-#    我们这个 `xiaojiu9b:latest` 是自建模型，**不在元数据里**，
+#    我们这个 `local-assistant-9b:latest` 是自建模型，**不在元数据里**，
 #    于是 AstrBot 以为窗口有 128000 —— 永远不压缩；
 #    而 Ollama 到 32768 就**静默丢掉最前面的 token（从中间切断）**，
 #    模型于是看到一段从半句开始的历史。

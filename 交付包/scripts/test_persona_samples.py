@@ -19,7 +19,7 @@ r"""
 用法：
     python test_persona_samples.py                 # 当前启用的人格，默认 5 条
     python test_persona_samples.py -n 3            # 3 条
-    python test_persona_samples.py -P 示例人格Y
+    python test_persona_samples.py -P 病娇-助手-露骨
     python test_persona_samples.py -p "再冷淡一点说" -p "你为什么不理我"
     python test_persona_samples.py --out 改前.txt
     python test_persona_samples.py --opening -n 5   # 固定一句只换 seed
@@ -36,9 +36,9 @@ console_utf8()   # 中文 Windows 控制台是 GBK，见 console_utf8.py
 
 from ollama_guard import chat, ensure_alive   # noqa: E402
 
-PERSONAS = Path(r"E:\本地ai\personas")
+PERSONAS = Path(r"C:\LocalAI-Assistant\personas")
 ACTIVE = PERSONAS / ".active"
-MODEL = "xiaojiu9b:latest"
+MODEL = "local-assistant-9b:latest"
 
 # 故意挑"情绪该出来"的场景：主观问题 / 冷淡的一句话 / 提到别人 / 极短 / 关于关系
 DEFAULT_PROMPTS = [
@@ -58,7 +58,7 @@ def main() -> int:
         return args[args.index(flag) + 1] if flag in args else default
 
     n = int(opt("-n", len(DEFAULT_PROMPTS)))
-    out_path = Path(opt("--out", r"E:\本地ai\persona_samples.txt"))
+    out_path = Path(opt("--out", r"C:\LocalAI-Assistant\persona_samples.txt"))
     n_predict = int(opt("--n-predict", 400))
     name = opt("-P")
     if name is None:

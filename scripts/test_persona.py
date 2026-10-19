@@ -18,11 +18,11 @@ console_utf8()   # GBK 控制台下打印 ❌ 会崩，见 console_utf8.py
 
 from ollama_guard import chat, ensure_alive   # noqa: E402
 
-MODEL = os.environ.get("XIAOJIU_MODEL", "xiaojiu9b:latest")
+MODEL = os.environ.get("LOCAL_ASSISTANT_MODEL", "local-assistant-9b:latest")
 
-# 测哪份人格：默认「示例人格Y」，可用 XIAOJIU_PERSONA 覆盖（不带 .txt）
-PERSONA = Path(r"E:\本地ai\personas") / (
-    os.environ.get("XIAOJIU_PERSONA", "示例人格Y") + ".txt")
+# 测哪份人格：默认「病娇-助手-露骨」，可用 LOCAL_ASSISTANT_PERSONA 覆盖（不带 .txt）
+PERSONA = Path(r"C:\LocalAI-Assistant\personas") / (
+    os.environ.get("LOCAL_ASSISTANT_PERSONA", "病娇-助手-露骨") + ".txt")
 if not PERSONA.exists():
     raise SystemExit(f"❌ 找不到人格文件: {PERSONA}")
 SYSTEM = PERSONA.read_text(encoding="utf-8").rstrip()
@@ -35,7 +35,7 @@ CASES = [
 ]
 
 # 每条回复的硬上限。模型加载另算（ensure_alive 会提前告诉你）。
-TIMEOUT = float(os.environ.get("XIAOJIU_TIMEOUT", "90"))
+TIMEOUT = float(os.environ.get("LOCAL_ASSISTANT_TIMEOUT", "90"))
 
 
 def main() -> int:

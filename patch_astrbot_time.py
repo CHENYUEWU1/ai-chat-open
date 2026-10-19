@@ -39,7 +39,7 @@ console_utf8()   # GBK 控制台下的兜底，见 console_utf8.py
 
 # AstrBot 主 agent 源码
 SRC = Path(
-    r"E:\本地ai\AstrBot\AstrBot_4.28.1_windows_amd64_portable"
+    r"C:\LocalAI-Assistant\AstrBot\AstrBot_4.28.1_windows_amd64_portable"
     r"\backend\app\astrbot\core\astr_main_agent.py"
 )
 

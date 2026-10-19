@@ -9,7 +9,7 @@ r"""开机预热：启动脚本里先把模型读进来、并保温（2026-10-08
 这里做的事：等 Ollama 起来 ⇒ 发一个最小请求把模型读进来 ⇒ 带 `keep_alive` 保温
 （实测 **`/api/generate` 认这个字段 ✓**，而 `/v1/chat/completions` 不认 ✗ —— 所以用原生接口）。
 
-想热身的模型换一个：改 `WARM_MODEL`，或 `python warmup.py --model xiaojiu9b:latest`。
+想热身的模型换一个：改 `WARM_MODEL`，或 `python warmup.py --model local-assistant-9b:latest`。
 不想用：启动脚本里把那行 `start ... warmup.py` 删掉即可（或 `--quiet` 让输出更少）。
 """
 import argparse
@@ -18,9 +18,9 @@ import sys
 import time
 import urllib.request
 
-WARM_MODEL = "qwen36-35b-uncensored:latest"     # 兜底默认；**网页上选过的会优先**（见 _chosen）
+WARM_MODEL = "local-assistant-35b:latest"     # 兜底默认；**网页上选过的会优先**（见 _chosen）
 WARM_KEEP_ALIVE = "30m"
-WARM_MODEL_FILE = r"E:\本地ai\_备份\预热模型.txt"     # 网关网页「🔥 开机预热」写的就是它
+WARM_MODEL_FILE = r"C:\LocalAI-Assistant\_备份\预热模型.txt"     # 网关网页「🔥 开机预热」写的就是它
 
 
 def _chosen() -> str:

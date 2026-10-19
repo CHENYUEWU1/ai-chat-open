@@ -36,8 +36,8 @@ import urllib.request
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-ACCESS_FILE = Path(r"E:\本地ai\_备份\网关访问码.txt")
-SESSION_FILE = Path(r"E:\本地ai\_备份\网关授权设备.json")
+ACCESS_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关访问码.txt")
+SESSION_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关授权设备.json")
 ok = fail = 0
 
 
@@ -157,8 +157,8 @@ def main() -> int:
     print("① 未授权：只能看到「输授权码」，看不到任何数据")
     st, h, _ = get(lan, "/")
     check("GET / 有输入框", "需要授权" in h and 'name="code"' in h)
-    check("没泄露模型名", "qwen36" not in h and "xiaojiu9b" not in h)
-    check("没泄露人格名", "示例角色A" not in h and "示例角色D" not in h)
+    check("没泄露模型名", "local-assistant-35b" not in h and "local-assistant-9b" not in h)
+    check("没泄露人格名", "示例角色A" not in h and "外向-助手" not in h)
     check("没泄露入网码", code not in h)
     check("没泄露设备表", "已授权设备" not in h and "生成手机授权码" not in h)
     for p in ("/__stats", "/__personas", "/__ticket", "/__clientlog"):
@@ -170,7 +170,7 @@ def main() -> int:
     check("未授权不能解除设备（403）", st == 403, f"HTTP {st}")
 
     print("\n② 不受影响：APK 下载、API、本机")
-    for p in ("/api/version", "/api/tags", "/LianYu-1.9.1-release.apk"):
+    for p in ("/api/version", "/api/tags", "/手机客户端-1.9.1-release.apk"):
         st, _, _ = get(lan, p)
         check(f"GET {p} 放行", st == 200, f"HTTP {st}")
     st, h, _ = get(loc, "/")
@@ -186,7 +186,7 @@ def main() -> int:
     ckA = f"gw_auth={tok}"
     st, h, _ = get(lan, "/", cookie=ckA)
     check("带 cookie 进控制台", "需要授权" not in h and "访问授权" in h)
-    check("带 cookie 看得到模型名", "qwen36" in h or "xiaojiu9b" in h)
+    check("带 cookie 看得到模型名", "local-assistant-35b" in h or "local-assistant-9b" in h)
 
     print("\n④ 退出授权 / 伪造 cookie")
     st, _, hdrs = get(lan, "/__auth?out=1", cookie=ckA)

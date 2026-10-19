@@ -1,25 +1,26 @@
 # -*- coding: utf-8 -*-
-r"""可选的 Ollama 模型预热工具。
+r"""开机预热：启动脚本里先把模型读进来、并保温（2026-10-08 加，用户选的"方案 C"）。
 
-它向本机 Ollama 发送一个最小请求，让模型提前载入并按 keep-alive 保持一段时间。
-基础聊天和网关启动不需要这个脚本。使用示例：python warmup.py --model qwen3.5:4b
+为什么需要它：
+  · 35B 冷启动要约 **30 秒**，而手机 App 的请求超时只有 **20~30 秒**（源码写死）
+    ⇒ 停一会儿再聊，第一条常被掐掉（表现成「发两句话才回一句」）。
+  · Ollama 默认**空闲 5 分钟**就卸载模型。
+
+这里做的事：等 Ollama 起来 ⇒ 发一个最小请求把模型读进来 ⇒ 带 `keep_alive` 保温
+（实测 **`/api/generate` 认这个字段 ✓**，而 `/v1/chat/completions` 不认 ✗ —— 所以用原生接口）。
+
+想热身的模型换一个：改 `WARM_MODEL`，或 `python warmup.py --model local-assistant-9b:latest`。
+不想用：启动脚本里把那行 `start ... warmup.py` 删掉即可（或 `--quiet` 让输出更少）。
 """
 import argparse
 import json
-import os
 import sys
 import time
 import urllib.request
-from pathlib import Path
 
-WARM_MODEL = os.environ.get("LOCAL_AI_WARM_MODEL", "qwen3.5:4b")
+WARM_MODEL = "local-assistant-35b:latest"     # 兜底默认；**网页上选过的会优先**（见 _chosen）
 WARM_KEEP_ALIVE = "30m"
-if os.environ.get("LOCALAPPDATA"):
-    _default_data_dir = Path(os.environ["LOCALAPPDATA"]) / "LocalAI-Assistant"
-else:
-    _default_data_dir = Path.home() / ".local" / "share" / "local-ai-assistant"
-DATA_DIR = Path(os.environ.get("LOCAL_AI_DATA_DIR", str(_default_data_dir))).expanduser()
-WARM_MODEL_FILE = DATA_DIR / "state" / "warm_model.txt"
+WARM_MODEL_FILE = r"C:\LocalAI-Assistant\_备份\预热模型.txt"     # 网关网页「🔥 开机预热」写的就是它
 
 
 def _chosen() -> str:
@@ -60,7 +61,7 @@ def main() -> int:
         say("[预热] Ollama 还没起来，跳过（不影响使用）")
         return 0
 
-    say(f"[预热] 正在载入 {args.model}…")
+    say(f"[预热] 正在把 {args.model} 读进显存…（35B 约 30 秒，9B 约 10 秒）")
     body = json.dumps({"model": args.model, "prompt": "hi", "stream": False,
                        "options": {"num_predict": 1},
                        "keep_alive": args.keep_alive}).encode("utf-8")

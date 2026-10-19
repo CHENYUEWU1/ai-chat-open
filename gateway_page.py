@@ -3,14 +3,12 @@
 import datetime
 
 # 网关主页不包含密钥；API Key 只由服务端的 /__key 路由按访问来源决定是否下发。
-PAGE_VER = "2026-10-19-ui5"      # 改页面就改它（服务端与页面共用这一个来源）
+PAGE_VER = "2026-10-19-ui1"      # 改页面就改它（服务端与页面共用这一个来源）
 
 PAGE = """<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>消费级电脑本地部署的局域网 AI 助手</title>
-<meta name="description" content="在消费级 Windows 电脑上运行本地 AI 模型，通过可信局域网连接浏览器、手机和兼容客户端。">
-<meta name="theme-color" content="#090d18">
+<title>本机模型 API</title>
 <!-- 不需要 JS 的探针①：JS 关掉的浏览器才会取它（用来区分"JS 关了"还是"脚本被拦了"） -->
 <noscript><link rel="stylesheet" href="/__nojs">
 <!-- 而且 JS 关掉时，让页面**自己每 5 秒重载**：下面的数字是服务端渲染进去的，
@@ -19,135 +17,60 @@ PAGE = """<!DOCTYPE html>
 <!-- 主页面主题样式集中在此；/plain 是单独的无 JS 兜底页，不依赖本页 CSS。 -->
 <style>
  /* 页面主题和基础组件集中在这里；服务端组件只输出结构与状态。 */
- :root{color-scheme:dark;--bg:#090d18;--panel:#111827;--panel2:#0c1220;
-       --line:rgba(150,170,210,.16);--text:#f3f5ff;--muted:#98a3bb;
-       --blue:#94b8ff;--blue2:#687bff;--green:#78e2b2;--amber:#ffd078;--red:#ff9292}
+ :root{color-scheme:dark;--panel2:#0d1422;--line:#26344b;
+       --text:#edf3ff;--muted:#9aa9bf;--blue:#6b9cff;--blue2:#3977f6;
+       --green:#63dba3;--amber:#ffd078;--red:#ff9292}
  *{box-sizing:border-box}
- html{scroll-behavior:smooth;scroll-padding-top:82px}
+ html{scroll-behavior:smooth;scroll-padding-top:66px}
  body{font:15px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
-      margin:0;padding:0 22px 56px;background:var(--bg);color:var(--text);
-      background-image:url('/__cssprobe'),radial-gradient(ellipse at 50% -22%,rgba(77,94,171,.25),transparent 58%),
-                       radial-gradient(ellipse at 100% 55%,rgba(37,132,147,.08),transparent 34%);
+      margin:0;padding:24px 18px;background:#0b1020;color:var(--text);
+      background-image:url('/__cssprobe'),radial-gradient(ellipse at 50% -18%,#1a2b4a 0,#0b1020 58%);
       background-attachment:fixed}
- .w{max-width:1120px;margin:0 auto}
- .topbar{height:76px;display:flex;align-items:center;justify-content:space-between;gap:16px}
- .brand{display:flex;align-items:center;gap:11px;color:var(--text);text-decoration:none}
- .brand-mark{width:38px;height:38px;display:grid;place-items:center;border-radius:13px;
-      color:white;font-size:19px;font-weight:800;background:linear-gradient(145deg,#8196ff,#5965d9);
-      box-shadow:0 7px 22px rgba(94,111,230,.28)}
- .brand-copy{display:grid;line-height:1.1;gap:4px}
- .brand-copy strong{font-size:16px;letter-spacing:.04em}
- .brand-copy small{font-size:9px;letter-spacing:.2em;color:#8290ac}
- .top-actions{display:flex;align-items:center;gap:15px}
- .top-caption{color:#8591aa;font-size:12px;letter-spacing:.08em}
- .status-pill{display:inline-flex;align-items:center;gap:8px;padding:7px 11px;border-radius:99px;
-      background:rgba(16,28,37,.8);border:1px solid rgba(120,226,178,.2);color:#a8e8cc;font-size:12px}
- .status-pill i{width:7px;height:7px;border-radius:50%;background:#727d92;box-shadow:0 0 0 4px rgba(114,125,146,.12)}
- .status-pill[data-state="online"] i{background:var(--green);box-shadow:0 0 0 4px rgba(120,226,178,.12)}
- .status-pill[data-state="offline"]{border-color:rgba(255,146,146,.25);color:#ffc3c3}
- .status-pill[data-state="offline"] i{background:var(--red);box-shadow:0 0 0 4px rgba(255,146,146,.12)}
- .hero{position:relative;display:grid;grid-template-columns:minmax(0,1.08fr) minmax(320px,.92fr);
-      min-height:390px;overflow:hidden;align-items:center;padding:42px 48px;margin:5px 0 26px;
-      border:1px solid rgba(165,179,232,.18);border-radius:28px;
-      background:linear-gradient(112deg,rgba(24,31,58,.96),rgba(18,26,45,.96) 56%,rgba(14,42,53,.94));
-      box-shadow:0 26px 80px rgba(0,0,0,.28)}
- .hero:before{content:"";position:absolute;inset:0;pointer-events:none;
-      background:radial-gradient(ellipse at 20% 0%,rgba(116,127,255,.18),transparent 47%),
-                 linear-gradient(120deg,transparent 48%,rgba(63,184,174,.045))}
- .hero-copy{position:relative;z-index:1;max-width:590px}
- .eyebrow{display:flex;align-items:center;gap:10px;color:#b7c4e7;font-size:10px;
-      font-weight:700;letter-spacing:.2em;margin:0 0 18px}
- .eyebrow:before{content:"";width:24px;height:1px;background:#a1a8ff}
- .hero h1{font-size:clamp(44px,5.5vw,68px);line-height:1.12;letter-spacing:-.055em;margin:0}
- .hero h1 span{background:linear-gradient(100deg,#c8d1ff 5%,#8eb6ff 54%,#73ddce 100%);
-      color:transparent;background-clip:text;-webkit-background-clip:text}
- .hero-lead{max-width:480px;margin:18px 0 23px;color:#b1bad0;font-size:15px;line-height:1.9}
- .hero-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
- .hero-cta,.hero-link{min-height:46px;display:inline-flex;align-items:center;justify-content:center;
-      gap:12px;padding:0 18px;border-radius:12px;text-decoration:none;font-size:13px;font-weight:700}
- .hero-cta{color:#101528;background:linear-gradient(105deg,#b4c1ff,#8ddbd4);
-      box-shadow:0 9px 24px rgba(112,155,234,.2);transition:transform .18s,filter .18s}
- .hero-cta:hover{color:#101528;filter:brightness(1.07);transform:translateY(-2px)}
- .hero-link{color:#d8def1;border:1px solid rgba(196,207,238,.2);background:rgba(255,255,255,.035)}
- .hero-link:hover{background:rgba(255,255,255,.08)}
- .hero-trust{display:flex;gap:17px;flex-wrap:wrap;margin-top:24px;color:#a3aec4;font-size:11px}
- .hero-trust span{display:inline-flex;align-items:center;gap:6px}
- .hero-trust b{color:#83e0bd;font-size:13px}
- .hero-endpoint{display:flex;align-items:center;gap:9px;margin-top:22px;color:#7e8aa5;font-size:11px}
- .hero-endpoint code{padding:5px 8px;border:1px solid rgba(169,185,224,.15);border-radius:7px;
-      color:#cbd5ee;background:rgba(6,11,23,.26)}
- .hero-visual{position:relative;min-height:300px;display:grid;place-items:center;isolation:isolate}
- .hero-visual:before,.hero-visual:after{content:"";position:absolute;border-radius:50%;pointer-events:none}
- .hero-visual:before{width:255px;height:255px;border:1px solid rgba(154,176,255,.13);
-      box-shadow:0 0 0 24px rgba(144,162,255,.025),0 0 0 54px rgba(144,162,255,.02)}
- .hero-visual:after{width:205px;height:205px;background:radial-gradient(circle,rgba(103,126,238,.28),rgba(65,171,169,.12) 48%,transparent 72%);
-      filter:blur(8px);z-index:-1}
- .orbit{position:absolute;border:1px solid rgba(158,183,240,.17);border-radius:50%;transform:rotate(-26deg)}
- .orbit-a{width:330px;height:126px}.orbit-b{width:365px;height:160px;transform:rotate(34deg)}
- .orbit-dot{position:absolute;width:8px;height:8px;border-radius:50%;background:#a9d7ff;
-      box-shadow:0 0 13px rgba(153,205,255,.95)}
- .dot-a{top:76px;right:78px}.dot-b{bottom:76px;left:72px;background:#7de0cf}
- .engine-card{position:relative;width:min(290px,90%);padding:17px 18px 14px;border-radius:19px;
-      border:1px solid rgba(201,211,255,.22);
-      background:linear-gradient(145deg,rgba(29,39,70,.94),rgba(13,24,42,.96));
-      box-shadow:0 24px 60px rgba(0,0,0,.4),inset 0 1px rgba(255,255,255,.07);
-      transform:rotate(-3deg)}
- .engine-cap,.engine-foot{display:flex;align-items:center;justify-content:space-between;color:#9ba9c7;font-size:9px;letter-spacing:.16em}
- .engine-cap i{width:6px;height:6px;margin-right:6px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
- .engine-cap span{margin-left:auto;color:#b3ecd5;letter-spacing:.04em}
- .engine-mark{width:52px;height:52px;display:grid;place-items:center;margin:17px 0 13px;border-radius:17px;
-      color:#e8eaff;font-size:25px;font-weight:800;background:linear-gradient(145deg,rgba(133,151,255,.35),rgba(67,186,177,.2));
-      border:1px solid rgba(194,211,255,.22)}
- .engine-title{display:grid;gap:3px}
- .engine-title small{color:#8795b1;font-size:9px;letter-spacing:.16em}
- .engine-title strong{color:#f1f4ff;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
- .engine-wave{height:30px;display:flex;align-items:center;gap:4px;margin:13px 0}
- .engine-wave i{flex:1;height:var(--h);border-radius:4px;background:linear-gradient(180deg,#8ea8ff,#62d8c4);opacity:.78}
- .engine-foot{padding-top:10px;border-top:1px solid rgba(181,196,235,.12);font-size:8px}
- .orbit-note{position:absolute;padding:6px 9px;border:1px solid rgba(175,194,232,.15);
-      border-radius:8px;background:rgba(13,22,39,.85);color:#b9c6df;font-size:9px;letter-spacing:.08em}
- .note-a{top:22px;left:15px}.note-b{right:3px;bottom:31px;color:#9fe3d4}
+ .w{max-width:980px;margin:0 auto}
+ h1{font-size:23px;line-height:1.25;letter-spacing:.01em;margin:0 0 6px}
+ .sub{color:var(--muted);font-size:13px;margin-bottom:12px}
+ .badge{display:inline-flex;align-items:center;border:1px solid #34527e;border-radius:999px;
+        padding:2px 9px;color:#b9d1ff;background:#172744;font-size:11px;vertical-align:middle}
  .quick-nav{position:sticky;top:0;z-index:10;display:flex;gap:8px;overflow-x:auto;
-      padding:10px 0;margin:0 0 18px;scrollbar-width:thin;
-      background:rgba(9,13,24,.9);backdrop-filter:blur(14px);
-      border-bottom:1px solid rgba(125,145,190,.12)}
- .quick-nav a{flex:none;text-decoration:none;color:#aeb9cf;background:rgba(255,255,255,.035);
-      border:1px solid rgba(150,170,210,.1);border-radius:9px;padding:7px 12px;font-size:12px}
- .quick-nav a:hover,.quick-nav a:focus-visible{border-color:rgba(148,184,255,.48);color:#fff;background:rgba(120,142,255,.1)}
- .card{background:linear-gradient(145deg,rgba(20,28,45,.97),rgba(14,20,33,.98));
-      border:1px solid var(--line);border-radius:18px;padding:20px;margin:14px 0;
-      box-shadow:0 12px 36px rgba(0,0,0,.16);scroll-margin-top:82px}
- .card:hover{border-color:rgba(148,184,255,.23)}
- .lbl{color:#d2daf0;font-size:14px;font-weight:700;letter-spacing:.01em;margin-bottom:12px}
+        padding:8px 0;margin:0 0 12px;scrollbar-width:thin;
+        background:rgba(11,16,32,.94);backdrop-filter:blur(10px);
+        border-bottom:1px solid rgba(75,96,127,.38)}
+ .quick-nav a{flex:none;text-decoration:none;color:#c6d6ef;background:#141f32;border:1px solid var(--line);
+        border-radius:999px;padding:7px 12px;font-size:13px}
+ .quick-nav a:hover,.quick-nav a:focus-visible{border-color:var(--blue);color:#fff}
+ .card{background:linear-gradient(145deg,rgba(20,30,48,.98),rgba(16,23,37,.98));
+       border:1px solid var(--line);border-radius:15px;padding:18px;margin:12px 0;
+       box-shadow:0 8px 26px rgba(0,0,0,.16);scroll-margin-top:66px}
+ .lbl{color:#b9c8dc;font-size:13px;font-weight:650;letter-spacing:.015em;margin-bottom:9px}
  .row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
- input,textarea,select,button{font:inherit;border-radius:10px;border:1px solid rgba(160,178,218,.2);
+ input,textarea,select,button{font:inherit;border-radius:9px;border:1px solid #34445d;
       background:var(--panel2);color:var(--text);padding:9px 11px}
  input,select{flex:1;min-width:180px}
  #api-key input#keyin{min-width:0;flex:1 1 280px}
  textarea{width:100%;min-height:48px;resize:vertical}
  input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,summary:focus-visible{
       outline:2px solid var(--blue);outline-offset:2px}
- button{min-height:42px;background:#1a2439;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s,transform .15s}
- button:hover{background:#263451;border-color:#718bbd;transform:translateY(-1px)}
- button.p{background:linear-gradient(105deg,#7186ff,#5772e7);border-color:#8293ff;color:white}
- button.p:hover{background:linear-gradient(105deg,#8798ff,#6782f4)}
- a{color:#a9c5ff}
+ button{min-height:42px;background:#1d2a40;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s}
+ button:hover{background:#293b59;border-color:#5474a5}
+ button.p{background:var(--blue2);border-color:var(--blue2);color:white}
+ button.p:hover{background:#568dff}
+ a{color:var(--blue)}
  code,pre{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
- pre{background:rgba(8,13,24,.78);border:1px solid var(--line);border-radius:11px;padding:13px;
+ pre{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:12px;
      overflow:auto;white-space:pre-wrap;word-break:break-all}
- .k{background:rgba(8,13,24,.75);border:1px dashed rgba(149,171,217,.29);border-radius:11px;padding:12px;
+ .k{background:var(--panel2);border:1px dashed #40516c;border-radius:9px;padding:12px;
     word-break:break-all;font-family:ui-monospace,Consolas,monospace}
- .out{min-height:100px;white-space:pre-wrap;border-left:3px solid #8b9bff;padding:11px 13px;
-      background:rgba(7,13,24,.48);border-radius:0 11px 11px 0}
+ .out{min-height:100px;white-space:pre-wrap;border-left:3px solid var(--blue2);padding:10px 0 10px 13px;
+      background:rgba(7,13,24,.35);border-radius:0 9px 9px 0}
  .hint{color:var(--muted);font-size:12.5px}
  .warn{color:var(--amber)}.ok{color:var(--green)}.bad{color:var(--red)}
  table{border-collapse:collapse;width:100%;font-size:13.5px}
- td{border-top:1px solid var(--line);padding:10px 8px;vertical-align:top}
+ td{border-top:1px solid var(--line);padding:8px 7px;vertical-align:top}
  td:first-child{color:var(--muted);width:150px}
  .meter{display:flex;align-items:center;gap:10px;margin:9px 0}
  .meter>span{width:58px;color:#bdcbe0;font-size:13px}
- .meter>.bar{flex:1;height:10px;background:rgba(6,11,22,.85);border:1px solid rgba(155,175,217,.1);border-radius:99px;overflow:hidden}
- .meter>.bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#6a80ff,#7cb9ff);transition:width .35s,background .35s}
+ .meter>.bar{flex:1;height:12px;background:var(--panel2);border:1px solid var(--line);border-radius:99px;overflow:hidden}
+ .meter>.bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#3977f6,#71a2ff);transition:width .35s,background .35s}
  .meter>em{width:158px;text-align:right;color:#dbe6f7;font-style:normal;font-size:13px;font-variant-numeric:tabular-nums}
  .lg{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:8px}
  .lg b{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px}
@@ -162,20 +85,8 @@ PAGE = """<!DOCTYPE html>
              background:#1c293c;color:var(--text);cursor:pointer}
  .code{font-size:19px;letter-spacing:4px;font-weight:700;color:#d5e4ff}
  @media(max-width:640px){
-   body{padding:0 13px 36px;background-attachment:scroll}
-   .topbar{height:66px}.top-caption{display:none}
-   .hero{grid-template-columns:1fr;min-height:0;padding:29px 23px 20px;border-radius:22px;margin-bottom:18px}
-   .hero h1{font-size:clamp(43px,12vw,58px)}
-   .hero-lead{font-size:14px;margin:14px 0 18px}
-   .hero-trust{gap:9px 14px;margin-top:18px}
-   .hero-endpoint{flex-wrap:wrap;margin-top:17px}.hero-endpoint code{max-width:100%;overflow-wrap:anywhere}
-   .hero-visual{min-height:245px;margin:8px -8px -8px}
-   .hero-visual:before{width:205px;height:205px}
-   .hero-visual:after{width:165px;height:165px}
-   .orbit-a{width:270px;height:104px}.orbit-b{width:290px;height:126px}
-   .engine-card{width:260px}.dot-a{top:63px;right:43px}.dot-b{bottom:56px;left:39px}
-   .note-a{top:8px;left:0}.note-b{right:0;bottom:14px}
-   .card{padding:15px;border-radius:15px;margin:11px 0}
+   body{padding:14px 11px;background-attachment:scroll}
+   h1{font-size:20px}.card{padding:14px;border-radius:12px;margin:10px 0}
    .meter{display:grid;grid-template-columns:46px minmax(0,1fr);gap:5px 9px}
    .meter>span{width:auto;grid-row:span 2;align-self:center}
    .meter>.bar{min-width:0;width:100%}.meter>em{width:auto;text-align:left;font-size:12px}
@@ -183,53 +94,9 @@ PAGE = """<!DOCTYPE html>
    .row>button{max-width:100%}.quick-nav{margin-right:-2px}
    td:first-child{width:105px}.dev{display:block;overflow-x:auto;white-space:nowrap}
  }
- @media(max-width:380px){.hero{padding:25px 18px 18px}.hero-trust{font-size:10px}.hero-visual{min-height:220px}}
  @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 </style></head><body><div class="w">
-<header class="topbar">
-  <a class="brand" href="/" aria-label="局域网 AI 助手主页">
-    <span class="brand-mark" aria-hidden="true">AI</span>
-    <span class="brand-copy"><strong>AI 助手</strong><small>LOCAL · SELF-HOSTED</small></span>
-  </a>
-  <div class="top-actions">
-    <span class="top-caption">你的模型 · 你的设备 · 你的节奏</span>
-    <span class="status-pill" id="heroStatus" data-state="checking" role="status">
-      <i></i><span id="heroStatusText">正在连接</span>
-    </span>
-  </div>
-</header>
-<section class="hero" aria-labelledby="heroTitle">
-  <div class="hero-copy">
-    <p class="eyebrow">YOUR OWN AI SPACE</p>
-    <h1 id="heroTitle">你的 AI，<br><span>就在本地。</span></h1>
-    <p class="hero-lead">在自己的设备上运行模型。直接开始对话，查看实时算力，或把接口接入手机与常用客户端。</p>
-    <div class="hero-actions">
-      <a class="hero-cta" href="#try-chat">开始体验 <span aria-hidden="true">↘</span></a>
-      <a class="hero-link" href="#connect">连接设备 <span aria-hidden="true">→</span></a>
-    </div>
-    <div class="hero-trust">
-      <span><b>✦</b> 本机推理</span><span><b>⌁</b> 搜索按需联网</span><span><b>◈</b> 设备访问可管理</span>
-    </div>
-    <div class="hero-endpoint"><span>当前服务</span><code id="base"></code></div>
-  </div>
-  <div class="hero-visual" aria-hidden="true">
-    <div class="orbit orbit-a"></div><div class="orbit orbit-b"></div>
-    <i class="orbit-dot dot-a"></i><i class="orbit-dot dot-b"></i>
-    <span class="orbit-note note-a">RUNNING ON YOUR DEVICE</span>
-    <span class="orbit-note note-b">NO CLOUD INFERENCE</span>
-    <div class="engine-card">
-      <div class="engine-cap"><i></i> LOCAL ENGINE <span>READY</span></div>
-      <div class="engine-mark">九</div>
-      <div class="engine-title"><small>ACTIVE MODEL</small><strong id="heroModel">正在读取模型…</strong></div>
-      <div class="engine-wave" aria-hidden="true">
-        <i style="--h:9px"></i><i style="--h:16px"></i><i style="--h:12px"></i><i style="--h:24px"></i>
-        <i style="--h:15px"></i><i style="--h:27px"></i><i style="--h:11px"></i><i style="--h:19px"></i>
-        <i style="--h:13px"></i><i style="--h:23px"></i><i style="--h:10px"></i><i style="--h:17px"></i>
-      </div>
-      <div class="engine-foot"><span>OLLAMA</span><span>ON DEVICE</span></div>
-    </div>
-  </div>
-</section>
+<h1>助手网关 <span class="badge">本机模型 · 局域网</span></h1>
 <!-- 不需要 JS 的探针②：普通图片，任何会渲染 HTML 的浏览器都会取它 -->
 <img src="/__imgprobe" width="1" height="1" alt="" style="position:absolute;left:-9px;top:-9px">
 <noscript><div class="card" style="border-color:#7a2b2b;background:#2a1414;color:#ffd0d0">
@@ -240,6 +107,7 @@ PAGE = """<!DOCTYPE html>
 </div></noscript>
 <div id="banner" class="card"
      style="display:none;border-color:#7a2b2b;background:#2a1414;color:#ffd0d0"></div>
+<div class="sub">这台电脑运行模型，手机和其他设备可通过本页或兼容 API 连接。地址：<code id="base"></code></div>
 <!-- 用原生锚点和 details，不依赖 JS；不要移除目标 id，或把长说明改成 JS 才能展开。 -->
 <nav class="quick-nav" aria-label="页面快捷导航">
   <a href="#resources">资源状态</a><a href="#api-key">API Key</a><a href="#try-chat">快速对话</a>
@@ -275,9 +143,9 @@ PAGE = """<!DOCTYPE html>
 </div>
 
 <!-- ⚠️ 2026-10-18 加：**手机把文件传给电脑**（纯 HTML 表单 ⇒ 不跑 JS 的浏览器也能用）。
-     存到本机数据目录；`/__upload` 和其他管理端点走同一道授权门。 -->
+     存到 `C:\LocalAI-Assistant\聊天文件` 这个目录；`/__upload` 和别的 __ 端点走同一道授权门 ✓ -->
 <div class="card" id="upload">
-  <div class="lbl">📎 传文件给电脑（保存在运行网关的电脑上）</div>
+  <div class="lbl">📎 传文件给电脑（存到 <code>C:\LocalAI-Assistant\聊天文件</code>）</div>
   <div class="hint" style="margin:6px 0">选好文件点「上传」；单个文件 ≤ 25 MB。成功后显示保存后的文件名。</div>
   <form method="post" action="/__upload" enctype="multipart/form-data">
     <input type="file" name="f"
@@ -290,16 +158,19 @@ PAGE = """<!DOCTYPE html>
 <div class="card" id="actions">
   <div class="lbl">控制</div>
   <div class="row">
-    <button class="p" id="btn_stop" onclick="shutdownLocalAI()">⏹ 关闭本机 AI 服务（需授权）</button>
+    <button class="p" id="btn_stop" onclick="shutdownlocal-assistant()">⏹ 停止模型（需先填 Key）</button>
     <button onclick="dryRun()">先看看会停哪些</button>
     <button onclick="makeTicket()">📱 生成手机授权码</button>
     <span id="ctlmsg" class="hint"></span>
   </div>
   <details class="help"><summary>停止服务会关闭哪些进程？</summary><div class="hint">
-    会停止本机 <b>Ollama</b>、相关推理进程和 <b>AstrBot</b>，用于释放模型占用的内存与显存。<br>
-    ⚠️ <b>网关也会一起关闭</b>：结果返回后 5 秒退出。之后当前页面将无法连接。<br>
-    要重新启动：从开始菜单启动 Ollama，再双击 <code>启动局域网API.bat</code>；如使用 AstrBot，再单独启动它。<br>
-    🔒 此操作需要 API Token；在页面上方授权后可点击。电脑本机访问无需额外授权。
+    等于双击 <code>停止模型.bat</code>：停 <b>Ollama</b>（释放显存）+ 清 <b>llama-server 残留</b>
+    （不杀它会留下占几 GB 内存的孤儿）+ 关 <b>AstrBot</b>。<br>
+    ⚠️ <b>连网关自己也一起停</b>：响应发出去后 <b>5 秒</b>结束网关（含别的 ollama_gateway 实例）
+    —— 也就是"助手的所有进程都关掉"。这 5 秒是留给你看结果的，之后这个页面会连不上。<br>
+    要重新启动：在电脑上双击 <code>启动局域网API.bat</code>（只起网关）或
+    <code>启动AstrBot.bat</code>（起对话整套）。<br>
+    🔒 这个按钮<b>要 Key</b>（先在上面「用这个 Key」填好）；电脑本机上打开则不用。
   </div></details>
   <form method="post" action="/__shutdown" style="margin-top:10px;border-top:1px solid #262b36;padding-top:10px">
     <div class="hint" style="margin-bottom:5px">
@@ -308,7 +179,7 @@ PAGE = """<!DOCTYPE html>
     </div>
     <input name="key" type="password" placeholder="把 Key 粘在这里"
            style="width:min(300px,55%)">
-    <button type="submit">⏹ 关闭本机 AI 服务（表单版）</button>
+    <button type="submit">⏹ 停止模型（表单版）</button>
     <button type="submit" name="dry" value="1">先看看会停哪些</button>
   </form>
 </div>
@@ -421,7 +292,7 @@ PAGE = """<!DOCTYPE html>
     · <b>联网搜索</b>：默认 <code>auto</code> —— 消息里出现事实/时效词（今天、最新、天气、价格、几点、版本…）网关就先去搜，
     结果里带来源；<b>「搜 / 搜索 / 查一下」开头是强制搜</b>。要"每句都搜"用 <code>--search-mode always</code>。<br>
     · 拉模型 <code>/api/pull</code>、删模型 <code>/api/delete</code> 被网关<b>默认拒绝（403）</b>。<br>
-    · 多人同时用会共享这台电脑的显存和内存；模型越小通常响应越快。
+    · 多人同时用会互相抢显存和内存；手机上想轻快，模型选 <code>local-assistant-9b</code>。
   </div></details>
 </div>
 </div>
@@ -430,7 +301,7 @@ const $ = id => document.getElementById(id);
 // 页面版本号：改页面就把它一起改掉（2026-10-05 加）。
 // 用途：手机上"看不到新按钮/新逻辑"时，日志里的 `ver=` 和页面右下角能立刻告诉我们是**新版还是缓存**。
 const PAGE_VER = '<!--SRV:ver-->';
-try{ document.title = '消费级电脑本地部署的局域网 AI 助手 · ' + PAGE_VER; }catch(e){}
+try{ document.title = '助手网关 · ' + PAGE_VER; }catch(e){}
 // 把手机上的情况回报给网关日志（我这边看不到你的控制台，只能靠这个）。
 // ⚠️ 两条路一起走：`fetch` + **图片信标**（`new Image()`）—— 有些老浏览器/WebView 没有 fetch，
 //    但图片信标一定能发出去；两条都不来，就说明这台设备的 JS 根本没在跑。
@@ -533,14 +404,8 @@ async function fillPersona(){
     $('pmsg').innerHTML = '<span class="ok">已填入 ' + name + '（' + (d.chars||0) + ' 字）</span>';
   }catch(e){ $('pmsg').innerHTML = '<span class="bad">' + e + '</span>'; }
 }
-let STOPPED = false;               // 本机 AI 服务是否已停（Ollama 不在跑）
+let STOPPED = false;               // 助手是否已停（Ollama 不在跑）
 function clearSys(){ $('sys').value = ''; $('pmsg').textContent = '已清空 —— 现在是裸模型'; }
-function setHeroStatus(up){
-  const pill = $('heroStatus'), label = $('heroStatusText');
-  if(!pill || !label) return;
-  pill.dataset.state = up ? 'online' : 'offline';
-  label.textContent = up ? '模型服务在线' : '模型服务离线';
-}
 function showBanner(html, danger){
   const b = $('banner');
   if(!html){ b.style.display = 'none'; return; }
@@ -550,20 +415,19 @@ function showBanner(html, danger){
   b.style.color = danger ? '#ffd0d0' : '#cdeed8';
   b.innerHTML = html;
 }
-// 健康检查：Ollama 一停（不管是点上面那个按钮，还是双击 关闭本机 AI 服务），
-// 服务停止后暂停轮询并显示状态，避免继续发送无用请求。
+// 健康检查：Ollama 一停（不管是点上面那个按钮，还是双击 停止模型.bat），
+// 这个页面就**停止刷新**并明确显示"已停止" —— 用户报过"网页脚本还在跑、不同步"。
 async function healthTick(){
   let up = false;
   try{ const r = await fetch('/api/version?t=' + Date.now() + '&v=' + PAGE_VER, {cache: 'no-store'}); up = r.ok;
        pstat('正常（Ollama ' + (up ? '在跑' : '已停止') + '）'); }
   catch(e){ up = false; pstat('连不上网关：' + e); clientlog('健康检查失败: ' + e); }
-  setHeroStatus(up);
   const was = STOPPED; STOPPED = !up;
   if(STOPPED){
-    showBanner('⏹ <b>本机模型服务已停止</b>（Ollama 没在运行）。先启动 Ollama，再双击 <code>启动局域网API.bat</code>。'
+    showBanner('⏹ <b>助手已停止</b>（Ollama 没在跑）。在电脑上双击 <code>启动AstrBot.bat</code> 就能起来，'
                + '这个页面会在几秒内自动恢复；期间<b>资源面板已暂停刷新</b>。', true);
   } else {
-    if(was) showBanner('✅ 本机 AI 服务又起来了（Ollama 已就绪），面板继续刷新。', false);
+    if(was) showBanner('✅ 助手又起来了（Ollama 已就绪），面板继续刷新。', false);
     else showBanner('', false);
     if(was) loadStats();
   }
@@ -571,8 +435,8 @@ async function healthTick(){
 function ctlSay(html){ $('ctlmsg').innerHTML = html; }
 function noKeyHint(){
   // 没填 Key 时**必须让人一眼看见**：以前只往小字里塞一句话，用户以为"按了没反应"
-  showBanner('🔒 停止本机 AI 服务需要先填 <b>API Key</b>：把上面的 Key 粘进「API Key（口令）」那个输入框，'
-             + '点 <b>「用这个 Key」</b>，再按下面的「⏹ 停止本机 AI 服务」。（电脑本机上打开则不用填）', true);
+  showBanner('🔒 停止模型需要先填 <b>API Key</b>：把上面的 Key 粘进「API Key（口令）」那个输入框，'
+             + '点 <b>「用这个 Key」</b>，再按下面的「⏹ 停止模型」。（电脑本机上打开则不用填）', true);
   const k = $('keyin');
   if(k){ k.style.borderColor = '#c0392b'; k.focus();
          try{ k.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){ k.scrollIntoView(); } }
@@ -597,15 +461,15 @@ async function makeTicket(){
     showBanner('📱 手机授权码：<b style="font-size:26px;letter-spacing:3px">' + d.code + '</b>'
                + '　（' + Math.round(d.ttl / 60) + ' 分钟内有效，用一次就作废）<br>'
                + '在手机上打开 <b>' + location.origin + '/plain</b> → 把它填进「✅ 授权这台手机」→ '
-               + '以后手机点「⏹ 停止本机 AI 服务」就不用再填 Key 了。', false);
+               + '以后手机点「⏹ 停止模型」就不用再填 Key 了。', false);
     const k = $('ticketmsg'); if(k) k.innerHTML = '授权码 <b>' + d.code + '</b>（填到手机 /plain 页）';
   }catch(e){ ctlSay('<span class="bad">' + e + '</span>'); }
 }
-async function shutdownLocalAI(){
-  clientlog('点击了 停止本机 AI 服务（Key=' + (TOKEN ? '有' : '没有') + '）');
+async function shutdownlocal-assistant(){
+  clientlog('点击了 停止模型（Key=' + (TOKEN ? '有' : '没有') + '）');
   if(!TOKEN){ noKeyHint(); return; }
-  if(!confirm('确定要关闭本机 AI 服务吗？\\n\\n这会停止 Ollama、相关推理进程和 AstrBot。\\n' +
-              '网关也会在 5 秒后退出。')) return;
+  if(!confirm('确定要停掉助手吗？\\n\\n停 Ollama（释放显存）+ 清 llama-server 残留 + 关 AstrBot。\\n' +
+              '网关和这个页面会留着，并提示"已停止"。')) return;
   ctlSay('正在停…');
   try{
     const r = await fetch('/__shutdown?t=' + Date.now(), {method:'POST', cache:'no-store',
@@ -616,9 +480,10 @@ async function shutdownLocalAI(){
            (d.detail || []).map(x => x.what + ' → ' + x.result).join('；') + '</span>');
     if(d.gateway_stops_in){
       STOPPED = true;                 // 停止面板轮询（网关马上要没了）
-      showBanner('⏹ <b>本机 AI 服务已全部停止</b> —— 网关（这个页面）将在 <b>'
+      showBanner('⏹ <b>助手已全部停止</b> —— 网关（这个页面）将在 <b>'
                  + d.gateway_stops_in + ' 秒</b>后关闭，之后本页会连不上。<br>'
-                 + '要重新启动：先启动 Ollama，再双击 <code>启动局域网API.bat</code>。', true);
+                 + '要重新启动：在电脑上双击 <code>启动局域网API.bat</code>（只起网关）'
+                 + '或 <code>启动AstrBot.bat</code>（起整套）。', true);
     }
     healthTick();
   }catch(e){ ctlSay('<span class="bad">' + e + '</span>'); }
@@ -658,7 +523,6 @@ async function loadStats(){
     $('pver').textContent = PAGE_VER;
     // 「模型」+「最近一次对话」（2026-10-06 加）：让"到底有没有调用模型"一眼可见
     if($('v_model') && d.model_line) $('v_model').innerHTML = d.model_line;
-    if($('heroModel') && d.model_line) $('heroModel').innerHTML = d.model_line;
     if($('v_lastchat') && d.last_chat_line) $('v_lastchat').innerHTML = d.last_chat_line;
 // 上下文占用（2026-10-18 加）：回答"快超载了吗"——分母是模型真窗口，不是写死的 64K
 if($('v_ctx') && d.ctx_line) $('v_ctx').innerHTML = d.ctx_line;
@@ -695,7 +559,7 @@ async function loadModels(){
       o.value = m.name; o.textContent = m.name + '  (' + (m.size/1e9).toFixed(1) + ' GB)'; sel.appendChild(o); });
     $('curl').textContent =
       'curl.exe ' + base + '/v1/chat/completions -H "Authorization: Bearer <KEY>" ^\\n' +
-      '  -H "Content-Type: application/json" -d "{\\"model\\":\\"' + (sel.value||'qwen3.5:4b') +
+      '  -H "Content-Type: application/json" -d "{\\"model\\":\\"' + (sel.value||'local-assistant-9b:latest') +
       '\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"你好\\"}]}"';
   }catch(e){ $('smsg').innerHTML = '<span class="bad">拉模型列表失败：' + e + '</span>'; }
 }
@@ -728,7 +592,7 @@ async function send(){
   const t0 = Date.now();
   try{
     const h = {'Content-Type':'application/json'};
-    if(TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;   // 页面已有 Token 时附加到 API 请求
+    if(TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;   // 没 Key 也发：服务端默认不强制口令
     const r = await fetch('/api/chat', {method:'POST', headers:h,
       body: JSON.stringify({model:$('model').value, messages:msgs, stream:true})});
     if(!r.ok){ $('out').textContent = 'HTTP ' + r.status + '\\n' + (await r.text()).slice(0,400);
@@ -753,7 +617,7 @@ loadKey(); loadModels();
 // 资源面板：每 3 秒刷一次，但**页面切到后台就不请求**（手机锁屏/切 App 时完全不耗）
 function statsTick(){ if(!document.hidden && !STOPPED) loadStats(); }   // 停了/切后台就不拉
 statsTick(); setInterval(statsTick, 3000);
-healthTick(); setInterval(healthTick, 5000);   // 本机 AI 服务一停，5 秒内页面就会显示"已停止"并停手
+healthTick(); setInterval(healthTick, 5000);   // 助手一停，5 秒内页面就会显示"已停止"并停手
 // 回到前台/重新获得焦点都立刻拉一次（手机上切走再回来，定时器可能被系统冻结过）
 ['visibilitychange', 'focus', 'pageshow'].forEach(function(ev){
   window.addEventListener(ev, function(){
@@ -768,7 +632,7 @@ setTimeout(function(){
             + ' hidden=' + document.hidden + ' 屏宽=' + window.innerWidth);
   $('pver').textContent = PAGE_VER;
   if(!has){
-    showBanner('🔒 这一页<b>还没有填 Key</b>：停止本机 AI 服务用不了。在电脑上打开 '
+    showBanner('🔒 这一页<b>还没有填 Key</b>：停止模型用不了。在电脑上打开 '
                + '<code>http://127.0.0.1:11435/</code> 复制 Key → 粘进上面「API Key（口令）」框 '
                + '→ 点「用这个 Key」。填一次就记住了（存在手机本地）。', true);
   }
@@ -780,12 +644,12 @@ setTimeout(function(){
 def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> str:
     r"""**完全不用 JavaScript 的极简控制页**（`GET /plain`）。
 
-    为什么单独做这一页（2026-10-05）：部分手机浏览器**会把内联脚本删掉**
+    为什么单独做这一页（2026-10-05）：用户的手机自带浏览器（vivo）**会把内联脚本删掉**
     （HTML/CSS 照渲染），于是主页面永远"资源读取中"、按钮点了没反应。
     这一页只用 HTML：
       · 数字由**服务端渲染**；
       · `<meta http-equiv="refresh" content="3">` **每 3 秒自己重载** ⇒ 数字会动；
-      · 停止本机 AI 服务 = **表单 POST**（表单不需要 JS）。
+      · 停止模型 = **表单 POST**（表单不需要 JS）。
     """
     cpu = st.get("cpu_pct")
     mem = st.get("mem") or {}
@@ -816,7 +680,7 @@ def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> s
 <!-- 这一页**故意没有一行 JavaScript**：给"会删掉脚本"的浏览器用。
      数字靠服务端渲染 + 这行 meta 每 3 秒自动重载来更新。 -->
 <meta http-equiv="refresh" content="3">
-<title>局域网 AI 助手控制台（无脚本版）</title>
+<title>助手控制台（不用脚本版）</title>
 <style>
  body{{font:15px/1.7 system-ui,"Microsoft YaHei",sans-serif;margin:0;padding:16px;
       background:#0f1115;color:#e6e6e6}}
@@ -836,7 +700,7 @@ def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> s
  .hint{{color:#8b93a1;font-size:12.5px}}
  a{{color:#7aa2f7}}
 </style></head><body><div class="w">
-<h1>⏹ 局域网 AI 助手控制台（无脚本版）</h1>
+<h1>⏹ 助手控制台（不用脚本版）</h1>
 <div class="sub">这一页<b>一行 JavaScript 都没有</b>，所以"会删脚本的浏览器"也能用。
   数字由服务端渲染，靠 <code>&lt;meta refresh&gt;</code> 每 3 秒重载更新（这一页刷新时间 {when}）。</div>
 
@@ -849,14 +713,17 @@ def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> s
 
 <div class="card">
   <div class="hint" style="margin-bottom:6px">
-    此操作会停止本机 Ollama、相关推理进程和 AstrBot，并在 5 秒后退出网关。<br>
-    要重新启动：先启动 Ollama，再双击 <code>启动局域网API.bat</code>；如使用 AstrBot，再单独启动它。<br>
+    停止模型 ＝ 双击 <code>停止模型.bat</code> 的三步：停 Ollama（释放显存）+
+    清 llama-server 残留 + 关 AstrBot，**并且 5 秒后连网关自己也关掉**
+    （＝ 用户要的"所有助手进程都关闭"）。这 5 秒是留给你看结果的。<br>
+    要重新启动：电脑上双击 <code>启动局域网API.bat</code>（只起网关）或
+    <code>启动AstrBot.bat</code>（起对话整套）。<br>
     {ok_html}
   </div>
   <form method="post" action="/__shutdown">
     <input name="key" type="password" placeholder="把 Key 粘在这里（或先做下面的授权）">
     <div>
-      <button type="submit">⏹ 关闭本机 AI 服务</button>
+      <button type="submit">⏹ 停止模型</button>
       <button type="submit" name="dry" value="1">先看看会停哪些</button>
     </div>
   </form>

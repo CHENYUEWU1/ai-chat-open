@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-把 9B 模型加入 Cherry Studio，并把助手「小九」切到 9B。
+把 9B 模型加入 Cherry Studio，并把助手「助手」切到 9B。
 4B 仍保留在列表里，随时可切回。
 """
 import shutil
@@ -11,13 +11,13 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-DB = Path(r"E:\本地ai\CherryStudio\data\Data\cherrystudio.sqlite")
+DB = Path(r"C:\LocalAI-Assistant\CherryStudio\data\Data\cherrystudio.sqlite")
 
-SRC_ID = "ollama::xiaojiu:latest"        # 已有的 4B
-DST_ID = "ollama::xiaojiu9b:latest"      # 要新增的 9B
-DST_MODEL = "xiaojiu9b:latest"
+SRC_ID = "ollama::local-assistant:latest"        # 已有的 4B
+DST_ID = "ollama::local-assistant-9b:latest"      # 要新增的 9B
+DST_MODEL = "local-assistant-9b:latest"
 DST_CTX = 32768
-PROMPT_FILE = Path(r"E:\本地ai\fix_cherry_assistant.py")
+PROMPT_FILE = Path(r"C:\LocalAI-Assistant\fix_cherry_assistant.py")
 
 
 def load_prompt() -> str:
@@ -69,7 +69,7 @@ def main() -> int:
         "id": DST_ID,
         "model_id": DST_MODEL,
         "name": DST_MODEL,
-        "group": "xiaojiu9b",
+        "group": "local-assistant-9b",
         "context_window": DST_CTX,
         "max_input_tokens": DST_CTX,
         "is_enabled": 1,

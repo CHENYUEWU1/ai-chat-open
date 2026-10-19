@@ -37,7 +37,7 @@ import ollama_gateway as gw                       # noqa: E402 —— ⚠️ 只
                                                   # （服务在 __main__ 里才起，见文件末尾）
 
 # 真的那个文件：**只读指纹，绝不写**
-REAL = Path(r"E:\本地ai\_备份\思考过程记录.txt")
+REAL = Path(r"C:\LocalAI-Assistant\_备份\思考过程记录.txt")
 
 
 def fingerprint(p: Path):

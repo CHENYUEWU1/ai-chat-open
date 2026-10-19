@@ -20,7 +20,7 @@ Ollama 卡死了怎么办 —— 一条命令复位。**AstrBot 不用关。**
     python fix_ollama.py --check    # 只体检，不动任何东西（只读）
     python fix_ollama.py --quiet    # 复位，少打印
 
-⚠️ 本脚本**不碰 AstrBot**。要把 AstrBot 也停掉（打游戏前释放显存）用「停止小九.bat」。
+⚠️ 本脚本**不碰 AstrBot**。要把 AstrBot 也停掉（打游戏前释放显存）用「停止模型.bat」。
 """
 import os
 import subprocess
@@ -32,7 +32,7 @@ from console_utf8 import console_utf8
 
 console_utf8()   # 中文 Windows 控制台是 GBK，见 console_utf8.py
 
-ROOT = Path(r"E:\本地ai")
+ROOT = Path(r"C:\LocalAI-Assistant")
 OLLAMA = ROOT / "ollama" / "ollama.exe"
 
 # ⚠️ 必须和「启动AstrBot.bat」里那几项一致，否则模型库/显存设置会不一样
@@ -130,7 +130,7 @@ def main() -> int:
         return 0
 
     print("[X] 重启后 40 秒内还是没应答。")
-    print("    下一步：双击「停止小九.bat」全部停掉，再双击「启动AstrBot.bat」重来一次。")
+    print("    下一步：双击「停止模型.bat」全部停掉，再双击「启动AstrBot.bat」重来一次。")
     return 1
 
 

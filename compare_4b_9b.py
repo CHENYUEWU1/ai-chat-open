@@ -11,7 +11,14 @@ from console_utf8 import console_utf8
 console_utf8()   # GBK 控制台下打印 ❌ 会崩，见 console_utf8.py
 
 API = "http://127.0.0.1:11434/api/chat"
-SYSTEM = """你是一个本地 AI 助手。不要假设用户的姓名、性别、年龄、职业或兴趣。
+SYSTEM = """你是「助手」，陈雅雾的私人 AI 助手，完全在本机运行。
+
+【关于陈雅雾】
+- 名字：陈雅雾。直接叫名字或用「你」，不要用「您」，不要加「同学」。
+- 身份：大一学生
+- 日常：写 Python，折腾 AI agent
+- 喜欢：打游戏、二次元
+- 讨厌：废话多
 
 【语言】始终使用简体中文。
 【性格】直接、坦率、有主见。不绕弯子，不说「作为AI」「我理解你的感受」这类空话。
@@ -25,7 +32,7 @@ SYSTEM = """你是一个本地 AI 助手。不要假设用户的姓名、性别�
 CASES = [
     ("事实", "Blue Archive 这个游戏的中文官方译名是什么？只回答名字。"),
     ("技术", "我在写 AI agent，用 Python，要加网络搜索工具，给最简可用代码。"),
-    ("自我介绍", "用一句话介绍你的回答风格。"),
+    ("记忆", "我叫什么？平时在干嘛？"),
 ]
 
 
@@ -53,7 +60,7 @@ def gpu():
     return o.stdout.strip()
 
 
-for model in ("xiaojiu:latest", "xiaojiu9b:latest"):
+for model in ("local-assistant:latest", "local-assistant-9b:latest"):
     print("\n" + "=" * 72)
     print(f"  模型：{model}")
     print("=" * 72)

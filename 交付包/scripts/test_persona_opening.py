@@ -13,7 +13,7 @@ r"""
     python test_persona_opening.py                    # 当前启用的人格，默认 5 个样本
     python test_persona_opening.py -n 8               # 8 个样本
     python test_persona_opening.py -p "在干嘛"         # 换提示词
-    python test_persona_opening.py -P 示例人格Y   # 换人格
+    python test_persona_opening.py -P 病娇-助手-露骨   # 换人格
     python test_persona_opening.py --full             # 连正文一起打
 
 判读：
@@ -39,9 +39,9 @@ console_utf8()   # 中文 Windows 控制台是 GBK，见 console_utf8.py
 
 from ollama_guard import chat, ensure_alive   # noqa: E402
 
-PERSONAS = Path(r"E:\本地ai\personas")
+PERSONAS = Path(r"C:\LocalAI-Assistant\personas")
 ACTIVE = PERSONAS / ".active"
-MODEL = "xiaojiu9b:latest"
+MODEL = "local-assistant-9b:latest"
 CHAT_TIMEOUT = 90.0    # 单条回复的硬上限（含模型加载时会更久，护栏会提示）
 
 DEFAULT_PROMPT = "在干嘛"

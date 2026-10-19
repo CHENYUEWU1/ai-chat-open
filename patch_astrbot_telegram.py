@@ -43,7 +43,7 @@ from safe_write import nl_of, read_text_raw, with_nl, write_bytes, write_text
 console_utf8()   # GBK 控制台下的兜底，见 console_utf8.py
 
 SRC = Path(
-    r"E:\本地ai\AstrBot\AstrBot_4.28.1_windows_amd64_portable"
+    r"C:\LocalAI-Assistant\AstrBot\AstrBot_4.28.1_windows_amd64_portable"
     r"\backend\app\astrbot\core\platform\sources\telegram\tg_adapter.py"
 )
 

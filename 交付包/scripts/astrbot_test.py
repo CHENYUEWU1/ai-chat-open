@@ -36,7 +36,7 @@ BASE = "http://127.0.0.1:6185"
 USER = os.environ.get("ASTRBOT_USER", "astrbot")
 PWD = os.environ.get("ASTRBOT_PASS", "")
 
-PROVIDER = "ollama_xiaojiu9b"
+PROVIDER = "ollama_local-assistant-9b"
 
 
 def cli_creds() -> None:

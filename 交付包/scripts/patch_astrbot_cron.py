@@ -56,9 +56,9 @@ from safe_write import nl_of, read_text_raw, with_nl, write_bytes, write_text
 
 console_utf8()   # GBK 控制台下的兜底，见 console_utf8.py
 
-ROOT = Path(r"E:\本地ai\AstrBot\AstrBot_4.28.1_windows_amd64_portable")
+ROOT = Path(r"C:\LocalAI-Assistant\AstrBot\AstrBot_4.28.1_windows_amd64_portable")
 TARGET = ROOT / "backend/app/astrbot/core/astr_main_agent.py"
-BAT = Path(r"E:\本地ai\启动AstrBot.bat")
+BAT = Path(r"C:\LocalAI-Assistant\启动AstrBot.bat")
 
 OLD = """    if config.add_cron_tools:
         _proactive_cron_job_tools(req, plugin_context)"""

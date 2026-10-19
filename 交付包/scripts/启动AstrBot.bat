@@ -1,6 +1,6 @@
 @echo off
 chcp 936 >nul
-title 小九 · AstrBot
+title 助手 · AstrBot
 setlocal
 
 REM ============================================================
@@ -9,10 +9,10 @@ REM  用户级变量写进注册表后，只有"之后新启动"的进程读得到；
 REM  父进程环境块是旧的话，子进程继承的还是旧值，
 REM  AstrBot 就会悄悄把数据写到 C:\Users\<你>\.astrbot
 REM ============================================================
-set "ASTRBOT_ROOT=E:\本地ai\AstrBotData"
+set "ASTRBOT_ROOT=C:\LocalAI-Assistant\AstrBotData"
 
 REM Ollama（模型也在 E 盘）
-set "OLLAMA_MODELS=E:\本地ai\models"
+set "OLLAMA_MODELS=C:\LocalAI-Assistant\models"
 set "OLLAMA_FLASH_ATTENTION=1"
 set "OLLAMA_KV_CACHE_TYPE=q8_0"
 set "OLLAMA_HOST=127.0.0.1:11434"
@@ -32,7 +32,7 @@ set "CURL=C:\Windows\System32\curl.exe"
 
 cls
 echo ==================================================
-echo    小九  ·  AstrBot Desktop
+echo    助手  ·  AstrBot Desktop
 echo    数据目录 : %ASTRBOT_ROOT%
 echo    WebUI    : http://127.0.0.1:6185
 echo ==================================================
@@ -43,7 +43,7 @@ REM 注意：这里刻意不用 goto 跳进括号块 —— cmd 里那样写会出诡异问题
 tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul
 if errorlevel 1 (
     echo [1/3] 启动 Ollama 推理服务 ...
-    start "Ollama" /MIN "E:\本地ai\ollama\ollama.exe" serve
+    start "Ollama" /MIN "C:\LocalAI-Assistant\ollama\ollama.exe" serve
     ping -n 8 127.0.0.1 >nul
 ) else (
     echo [1/3] Ollama 已在运行
@@ -51,13 +51,13 @@ if errorlevel 1 (
 
 REM ↓ 开机预热（2026-10-08 加，方案 C）：先把模型读进来并保温，聊天时不用等冷启动。
 REM   默认预热 35B（约 15~30 秒就绪）；想换热身的模型，改 warmup.py 顶部的 WARM_MODEL。
-start "warmup" /min python "E:\本地ai\warmup.py"
+start "warmup" /min python "C:\LocalAI-Assistant\warmup.py"
 
 REM ---------- 2. AstrBot ----------
 tasklist /FI "IMAGENAME eq AstrBot.exe" 2>nul | find /I "AstrBot.exe" >nul
 if errorlevel 1 (
     echo [2/3] 启动 AstrBot ...
-    start "" "E:\本地ai\AstrBot\AstrBot_4.28.1_windows_amd64_portable\AstrBot.exe"
+    start "" "C:\LocalAI-Assistant\AstrBot\AstrBot_4.28.1_windows_amd64_portable\AstrBot.exe"
 ) else (
     echo [2/3] AstrBot 已在运行
 )
@@ -80,9 +80,9 @@ explorer "http://127.0.0.1:6185"
 
 echo.
 echo ==================================================
-echo   模型应为 xiaojiu9b:latest，人格是小九。
+echo   模型应为 local-assistant-9b:latest，人格是助手。
 echo   换人格：双击「切换人格.bat」
-echo   打游戏前：双击「停止小九.bat」释放 5.6 GB 显存
+echo   打游戏前：双击「停止模型.bat」释放 5.6 GB 显存
 echo ==================================================
 echo.
 echo 本窗口 4 秒后自动关闭...

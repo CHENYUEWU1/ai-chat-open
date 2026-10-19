@@ -32,7 +32,7 @@ from console_utf8 import console_utf8
 
 console_utf8()
 
-ROOT = Path(r"E:\本地ai\AstrBotData")
+ROOT = Path(r"C:\LocalAI-Assistant\AstrBotData")
 DB = ROOT / "data" / "data_v4.db"
 
 

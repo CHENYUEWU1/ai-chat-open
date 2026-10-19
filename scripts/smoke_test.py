@@ -24,6 +24,16 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# ⚠️ 2026-10-19 加：stdout **不是控制台**（管道 / 重定向 / `| Tee-Object` / 日志采集）时，
+#    Python 按**区域编码**（本机 cp936）写出去 ⇒ 打印第一个 ✅ 就
+#    `UnicodeEncodeError: 'gbk' codec can't encode '\u2705'`，脚本**在第一条结果处直接崩**，
+#    看着像"冒烟挂了"，实际什么都还没测。实测踩过：`python smoke_test.py > 日志.txt` 立刻崩。
+#    与 `test_access.py` 顶部同一行处理**保持逐字一致**（那里早就有了，这里漏了）✓
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:  # noqa: BLE001 —— 老解释器 / 被替换过的流不支持就算了，别因此崩
+    pass
+
 ROOT = Path(__file__).resolve().parent
 RESULTS: list = []
 
@@ -221,21 +231,21 @@ def main() -> int:
 
         # ── 4 真发一条聊天 ─────────────────────────────────
         #
-        # ⚠️⚠️ **这里绝对不能写死模型名**（原先是 "xiaojiu9b:latest"，2026-10-11 修）。
+        # ⚠️⚠️ **这里绝对不能写死模型名**（原先是 "local-assistant-9b:latest"，2026-10-11 修）。
         #   原因：启动脚本设了 `OLLAMA_MAX_LOADED_MODELS=1` —— 本测试只要加载了 9B，
         #   Ollama 就会把用户**刚预热好的 35B 卸载掉**，于是用户下一条消息要重读模型
         #   （35B 冷启动实测 16~38 秒），现象就是"怎么卡住了 / 是不是坏了" ✗
         #   冒烟测试的职责是**验证**，不是改变用户现场 ⇒ 一律**优先用已经加载的那个模型**：
         #     ① `/api/ps` 里已加载的（用户自己拉起、或开机预热拉起的那个）
         #     ② 一个都没加载 ⇒ 读 `_备份\预热模型.txt`（网页上选的预热目标）
-        #     ③ 再没有 ⇒ 才退回默认 "xiaojiu9b:latest"
+        #     ③ 再没有 ⇒ 才退回默认 "local-assistant-9b:latest"
         preheat = cur("预热模型.txt", "")
         if args.no_chat:
             print("  ℹ️ --no-chat：跳过「真发一条聊天」（不会动你加载的模型）", flush=True)
         elif not ollama_up:
             skip("真发一条聊天能拿到正文", "Ollama 没在跑")
         else:
-            chat_model = ps_start or preheat or "xiaojiu9b:latest"
+            chat_model = ps_start or preheat or "local-assistant-9b:latest"
             if not preheat or chat_model == preheat:
                 print(f"  ℹ️ 本次聊天用的模型 = {chat_model}（预热的是 {preheat or '未设置'}）",
                       flush=True)

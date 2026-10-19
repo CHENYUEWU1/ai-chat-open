@@ -17,8 +17,6 @@
 """
 from __future__ import annotations
 
-from urllib.parse import urlsplit
-
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -39,20 +37,6 @@ web_search 只给标题和摘要。当你需要**具体数字、条款、版本�
 - 一次只读一个页面，不要同时读多个
 - 读完用**你自己的话**总结给用户，不要把整页原文贴出来
 """
-
-
-def _safe_url_for_log(raw: str) -> str:
-    """保留目标域名用于排错，不把凭据、路径和查询参数写进日志。"""
-    try:
-        parsed = urlsplit(raw)
-        if parsed.scheme not in ("http", "https") or not parsed.hostname:
-            return "<URL 已隐藏>"
-        host = parsed.hostname
-        if parsed.port:
-            host += f":{parsed.port}"
-        return f"{parsed.scheme}://{host}/…"
-    except (TypeError, ValueError):
-        return "<URL 已隐藏>"
 
 
 @dataclass
@@ -89,17 +73,16 @@ class FetchUrlTool(FunctionTool[AstrAgentContext]):
         except (TypeError, ValueError):
             max_chars = DEFAULT_CHARS
 
-        safe_url = _safe_url_for_log(url)
-        logger.info(f"[fetch_url] 抓取 {safe_url}（max_chars={max_chars}）")
+        logger.info(f"[fetch_url] 抓取 {url}（max_chars={max_chars}）")
         try:
             text = await fetch_text(url, max_chars)
             logger.info(f"[fetch_url] 成功，返回 {len(text)} 字符")
             return text
         except FetchError as exc:
-            logger.info(f"[fetch_url] 失败（{type(exc).__name__}）：{safe_url}")
+            logger.info(f"[fetch_url] 失败：{exc}")
             return f"抓取失败：{exc}"
         except Exception as exc:  # noqa: BLE001
-            logger.warning(f"[fetch_url] 未预期错误 on {safe_url}: {type(exc).__name__}")
+            logger.warning(f"[fetch_url] 未预期错误 on {url}: {exc!r}")
             return f"抓取失败：{type(exc).__name__}: {exc}"
 
 

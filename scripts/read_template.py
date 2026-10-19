@@ -11,9 +11,9 @@ from safe_write import write_bytes, write_text
 console_utf8()   # GBK 控制台下打印 ✅/❌ 会崩，见 console_utf8.py
 
 SRC = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(
-    r"E:\本地ai\downloads\Qwen3.5-9B-Uncensored-Q4_K_M.gguf"
+    r"C:\LocalAI-Assistant\downloads\Qwen3.5-9B-Uncensored-Q4_K_M.gguf"
 )
-OUT = Path(r"E:\本地ai\template_original.jinja")
+OUT = Path(r"C:\LocalAI-Assistant\template_original.jinja")
 
 KEY = "tokenizer.chat_template"
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""开启助手「小九」的联网搜索，并确认搜索源可用。"""
+"""开启助手「助手」的联网搜索，并确认搜索源可用。"""
 import json
 import shutil
 import sqlite3
@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-DB = Path(r"E:\本地ai\CherryStudio\data\Data\cherrystudio.sqlite")
+DB = Path(r"C:\LocalAI-Assistant\CherryStudio\data\Data\cherrystudio.sqlite")
 
 
 def main() -> int:

@@ -3,7 +3,7 @@
 """实测模型的工具调用能力：能否正确决定何时搜索、并给出合规的调用参数。
 
 默认测 9B（4B 已删除）。可临时指定别的：
-    set XIAOJIU_MODEL=xiaojiu9b:latest
+    set LOCAL_ASSISTANT_MODEL=local-assistant-9b:latest
 """
 import json
 import os
@@ -14,7 +14,7 @@ from console_utf8 import console_utf8
 console_utf8()   # GBK 控制台下打印 ✅/❌ 会崩，见 console_utf8.py
 
 API = "http://127.0.0.1:11434/api/chat"
-MODEL = os.environ.get("XIAOJIU_MODEL", "xiaojiu9b:latest")
+MODEL = os.environ.get("LOCAL_ASSISTANT_MODEL", "local-assistant-9b:latest")
 
 TOOLS = [{
     "type": "function",
@@ -38,7 +38,7 @@ def ask(prompt, use_tools=True):
         "stream": False,
         "think": False,
         "messages": [
-            {"role": "system", "content": "你是小九，简体中文助手。需要实时信息时必须调用 web_search 工具。"},
+            {"role": "system", "content": "你是助手，简体中文助手。需要实时信息时必须调用 web_search 工具。"},
             {"role": "user", "content": prompt},
         ],
     }

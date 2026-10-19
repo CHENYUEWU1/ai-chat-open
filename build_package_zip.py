@@ -1,12 +1,37 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Build a reviewable ZIP from tracked, public package files.
+r"""
+把 交付包\ 目录重建成 `助手-AI助手-交付包.zip`（纯文档快照）。
 
-Private persona text, generated full-content bundles, backups, chat files and
-untracked local material are excluded even when present in the working tree.
+为什么要脚本：
+    以前这个 zip 是手工压的，压完忘了重压，它就和 交付包\ 目录悄悄不一致了
+    （实测过一次：zip 里的文档还是旧的，目录里的已经是新的）。
+    这个脚本保证 zip 永远 == 交付包\ 目录。
+
+会排除：
+    __pycache__/      运行脚本产生的字节码（不该进包）
+    这个 zip 自己
+
+⚠️ 一个**故意的不一致**（别去"修"它）：
+    `README.md` 在两处内容不同，是**设计如此** ——
+      项目根 `C:\LocalAI-Assistant\README.md`      = 给项目本人的总入口
+      交付包 `交付包\README.md`          = 给"拿到 zip 的人"的入口（精简版）
+    所以本脚本**不**动 README.md，`organize_package.py` 也**不**镜像它。
+
+⚠️ 文档主副本的方向（2026-09-22 改过，别按旧印象来）：
+    **主副本 = `交付包\` 里那份**，项目根的同名文件是**快照**。
+    `使用说明.md` / `本地AI部署方案.md` / `人格写作模板.md` / `给AI的完整说明书.md`
+    这四份由 `organize_package.py` 从包内同步到项目根，并有 `--check` 逐字节校验。
+    （更早的版本说"主副本在根目录"，实测就是这么漂的 ——
+     包内的说明书更新到"文档分栏"后，根目录那份还停在分栏之前。
+     这正是坑 23 / 坑 24 那个病：**没人校验的副本一定会漂**。）
+    → 改这几份文档**改 `交付包\` 里那份**，然后跑 `python organize_package.py`。
+
+用法：
+    python build_package_zip.py            # 重建
+    python build_package_zip.py --check    # 只对比 zip 和目录，不重建
 """
 import os
-import subprocess
 import sys
 import zipfile
 import zlib
@@ -16,54 +41,25 @@ from console_utf8 import console_utf8
 
 console_utf8()   # GBK 控制台下打印 ✅/❌ 会崩，见 console_utf8.py
 
-def find_project_root(start: Path) -> Path:
-    for parent in (start, *start.parents):
-        if (parent / "启动AstrBot.bat").is_file():
-            return parent
-    raise RuntimeError("找不到项目根目录标记：启动AstrBot.bat")
+PKG = Path(r"C:\LocalAI-Assistant\交付包")
+ZIP = Path(r"C:\LocalAI-Assistant\助手-AI助手-交付包.zip")
+TOP = "助手-AI助手-交付包"          # zip 里的顶层目录名
 
-
-ROOT = find_project_root(Path(__file__).resolve().parent)
-PKG = ROOT / "交付包"
-ZIP = ROOT / "小九-AI助手-交付包.zip"
-TOP = "小九-AI助手-交付包"          # zip 里的顶层目录名
-
-EXCLUDE_DIRS = {"__pycache__", "personas", "_源文件", "_备份", "聊天文件", "不要看"}
-
-
-def is_public_package_file(rel: Path) -> bool:
-    if any(part in EXCLUDE_DIRS for part in rel.parts):
-        return False
-    if rel.name.startswith("单文件版-"):
-        return False
-    if rel.suffix.lower() in {".pyc", ".log", ".db", ".jsonl"}:
-        return False
-    return True
+EXCLUDE_DIRS = {"__pycache__"}
 
 
 def collect() -> list[Path]:
-    result = subprocess.run(
-        ["git", "ls-files", "-z", "--", "交付包"],
-        cwd=ROOT,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError("无法读取 Git 跟踪文件；为避免打入本机私有文件，已停止打包")
-
     out = []
-    for raw in result.stdout.decode("utf-8").split("\0"):
-        if not raw:
+    for p in sorted(PKG.rglob("*")):
+        if not p.is_file():
             continue
-        tracked = Path(raw.replace("/", os.sep))
-        try:
-            rel = tracked.relative_to(Path("交付包"))
-        except ValueError:
+        rel = p.relative_to(PKG)
+        if any(part in EXCLUDE_DIRS for part in rel.parts):
             continue
-        source = PKG / rel
-        if source.is_file() and not source.is_symlink() and is_public_package_file(rel):
-            out.append(rel)
-    return sorted(out)
+        if rel.suffix == ".pyc":
+            continue
+        out.append(rel)
+    return out
 
 
 def zip_entries(path: Path) -> dict[str, tuple[int, int]]:

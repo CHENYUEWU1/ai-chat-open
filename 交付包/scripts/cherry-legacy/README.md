@@ -2,7 +2,7 @@
 
 > **Cherry Studio 已于 2026-09-22 从本机卸载**（前端换成 AstrBot Desktop）。
 > 这些脚本**现在跑不了** —— 它们读写的是 Cherry Studio 的 SQLite
-> （`E:\本地ai\CherryStudio\data\Data\cherrystudio.sqlite`），那个目录已经删了。
+> （`C:\LocalAI-Assistant\CherryStudio\data\Data\cherrystudio.sqlite`），那个目录已经删了。
 >
 > **留在这里纯粹是为了记录踩过的坑。** 如果哪天想装回 Cherry Studio，
 > 这些脚本改一下 `DB` 常量还能用。
@@ -24,7 +24,7 @@
 
 | 旧（Cherry） | 新（AstrBot） |
 |---|---|
-| `apply_persona.py 示例人格Y` | `python scripts\astrbot_setup.py` |
+| `apply_persona.py 病娇-助手-露骨` | `python scripts\astrbot_setup.py` |
 | `switch_persona.ps1` / `切换人格.bat` | 改 `personas\` 里的文件 + 重跑 `astrbot_setup.py` |
 | `fix_agent_model.py` | 不需要了（只有一个前端，一个模型）|
 | `enable_websearch.py` / `disable_cloud.py` | `astrbot_setup.py` 一次搞定 |
@@ -38,5 +38,5 @@
 把一份**硬编码的旧人格**写回数据库 —— 结果 `apply_persona.py`
 刚调好的人格被静默还原，而且不报错。
 
-`astrbot_setup.py` 也写人格，但它读的是 `personas\示例人格Y.txt`
+`astrbot_setup.py` 也写人格，但它读的是 `personas\病娇-助手-露骨.txt`
 （单一数据源），不会再出现两份人格互相盖的情况。

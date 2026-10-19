@@ -1,13 +1,13 @@
 @echo off
 chcp 936 >nul
-title 切换人格 · 小九
+title 切换人格 · 助手
 setlocal
 
-set "ASTRBOT_ROOT=E:\本地ai\AstrBotData"
+set "ASTRBOT_ROOT=C:\LocalAI-Assistant\AstrBotData"
 set "CURL=C:\Windows\System32\curl.exe"
 
 echo ==================================================
-echo   切换人格 · 小九
+echo   切换人格 · 助手
 echo ==================================================
 echo.
 
@@ -34,7 +34,7 @@ REM ---------- 2. 选人格 ----------
 echo.
 echo [2/3] 选择人格 ...
 echo.
-"%PY%" "E:\本地ai\astrbot_setup.py" --pick
+"%PY%" "C:\LocalAI-Assistant\astrbot_setup.py" --pick
 if errorlevel 1 (
     echo.
     echo 切换失败，AstrBot 不会重启。
@@ -45,7 +45,7 @@ if errorlevel 1 (
 REM ---------- 3. 重启 ----------
 echo.
 echo [3/3] 重启 AstrBot ...
-start "" "E:\本地ai\AstrBot\AstrBot_4.28.1_windows_amd64_portable\AstrBot.exe"
+start "" "C:\LocalAI-Assistant\AstrBot\AstrBot_4.28.1_windows_amd64_portable\AstrBot.exe"
 set /a n=0
 :wait
 ping -n 3 127.0.0.1 >nul

@@ -1,4 +1,4 @@
-FROM E:\本地ai\downloads\Qwen3.5-9B-Uncensored-Q4_K_M.gguf
+FROM C:\LocalAI-Assistant\downloads\Qwen3.5-9B-Uncensored-Q4_K_M.gguf
 
 # ---- 采样参数（Qwen 官方「非思考模式」推荐值）----
 PARAMETER temperature 0.7
@@ -34,7 +34,7 @@ SYSTEM """/no_think"""
 #    "她问技术问题时直接给能用的代码"，而 AstrBot 的人格里写的是
 #    "一般三到六句"、"写亲密内容时不受此限"、"不写代码"。
 #    模型同时收到两条相反指令 → 行为随机。
-#    实测：收紧人格后「示例角色D」仍有 1/9 的样本漏出代码标识符，
+#    实测：收紧人格后「外向-助手」仍有 1/9 的样本漏出代码标识符，
 #    根源就是这里那句"直接给能用的代码"。
 #    （另外这里还把性别写错了：「她问技术问题」。）
 #

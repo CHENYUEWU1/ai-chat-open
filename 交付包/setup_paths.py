@@ -22,7 +22,7 @@ from pathlib import Path
 
 # 包里写死的原始路径（要替换的目标）
 OLD_BASES = [
-    r"E:\本地ai",
+    r"C:\LocalAI-Assistant",
     "E:/本地ai",
     "E:\\\\本地ai",
 ]
@@ -100,7 +100,7 @@ def main() -> int:
         print("\n未修改（路径保持不变）。")
         return 0
 
-    if new_base.lower() == r"e:\本地ai".lower():
+    if new_base.lower() == r"C:\LocalAI-Assistant".lower():
         print("\n新路径与原来相同，无需修改。")
         return 0
 

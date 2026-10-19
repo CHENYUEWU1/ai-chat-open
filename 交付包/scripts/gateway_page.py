@@ -3,7 +3,7 @@
 import datetime
 
 # 网关主页不包含密钥；API Key 只由服务端的 /__key 路由按访问来源决定是否下发。
-PAGE_VER = "2026-10-18-ui2"      # 改页面就改它（服务端与页面共用这一个来源）
+PAGE_VER = "2026-10-19-ui1"      # 改页面就改它（服务端与页面共用这一个来源）
 
 PAGE = """<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
@@ -96,7 +96,7 @@ PAGE = """<!DOCTYPE html>
  }
  @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 </style></head><body><div class="w">
-<h1>小九网关 <span class="badge">本机模型 · 局域网</span></h1>
+<h1>助手网关 <span class="badge">本机模型 · 局域网</span></h1>
 <!-- 不需要 JS 的探针②：普通图片，任何会渲染 HTML 的浏览器都会取它 -->
 <img src="/__imgprobe" width="1" height="1" alt="" style="position:absolute;left:-9px;top:-9px">
 <noscript><div class="card" style="border-color:#7a2b2b;background:#2a1414;color:#ffd0d0">
@@ -143,9 +143,9 @@ PAGE = """<!DOCTYPE html>
 </div>
 
 <!-- ⚠️ 2026-10-18 加：**手机把文件传给电脑**（纯 HTML 表单 ⇒ 不跑 JS 的浏览器也能用）。
-     存到 `E:\本地ai\聊天文件\`；`/__upload` 和别的 __ 端点走同一道授权门 ✓ -->
+     存到 `C:\LocalAI-Assistant\聊天文件` 这个目录；`/__upload` 和别的 __ 端点走同一道授权门 ✓ -->
 <div class="card" id="upload">
-  <div class="lbl">📎 传文件给电脑（存到 <code>E:\本地ai\聊天文件\</code>）</div>
+  <div class="lbl">📎 传文件给电脑（存到 <code>C:\LocalAI-Assistant\聊天文件</code>）</div>
   <div class="hint" style="margin:6px 0">选好文件点「上传」；单个文件 ≤ 25 MB。成功后显示保存后的文件名。</div>
   <form method="post" action="/__upload" enctype="multipart/form-data">
     <input type="file" name="f"
@@ -158,16 +158,16 @@ PAGE = """<!DOCTYPE html>
 <div class="card" id="actions">
   <div class="lbl">控制</div>
   <div class="row">
-    <button class="p" id="btn_stop" onclick="shutdownXiaojiu()">⏹ 停止小九（需先填 Key）</button>
+    <button class="p" id="btn_stop" onclick="shutdownlocal-assistant()">⏹ 停止模型（需先填 Key）</button>
     <button onclick="dryRun()">先看看会停哪些</button>
     <button onclick="makeTicket()">📱 生成手机授权码</button>
     <span id="ctlmsg" class="hint"></span>
   </div>
   <details class="help"><summary>停止服务会关闭哪些进程？</summary><div class="hint">
-    等于双击 <code>停止小九.bat</code>：停 <b>Ollama</b>（释放显存）+ 清 <b>llama-server 残留</b>
+    等于双击 <code>停止模型.bat</code>：停 <b>Ollama</b>（释放显存）+ 清 <b>llama-server 残留</b>
     （不杀它会留下占几 GB 内存的孤儿）+ 关 <b>AstrBot</b>。<br>
     ⚠️ <b>连网关自己也一起停</b>：响应发出去后 <b>5 秒</b>结束网关（含别的 ollama_gateway 实例）
-    —— 也就是"小九的所有进程都关掉"。这 5 秒是留给你看结果的，之后这个页面会连不上。<br>
+    —— 也就是"助手的所有进程都关掉"。这 5 秒是留给你看结果的，之后这个页面会连不上。<br>
     要重新启动：在电脑上双击 <code>启动局域网API.bat</code>（只起网关）或
     <code>启动AstrBot.bat</code>（起对话整套）。<br>
     🔒 这个按钮<b>要 Key</b>（先在上面「用这个 Key」填好）；电脑本机上打开则不用。
@@ -179,7 +179,7 @@ PAGE = """<!DOCTYPE html>
     </div>
     <input name="key" type="password" placeholder="把 Key 粘在这里"
            style="width:min(300px,55%)">
-    <button type="submit">⏹ 停止小九（表单版）</button>
+    <button type="submit">⏹ 停止模型（表单版）</button>
     <button type="submit" name="dry" value="1">先看看会停哪些</button>
   </form>
 </div>
@@ -292,7 +292,7 @@ PAGE = """<!DOCTYPE html>
     · <b>联网搜索</b>：默认 <code>auto</code> —— 消息里出现事实/时效词（今天、最新、天气、价格、几点、版本…）网关就先去搜，
     结果里带来源；<b>「搜 / 搜索 / 查一下」开头是强制搜</b>。要"每句都搜"用 <code>--search-mode always</code>。<br>
     · 拉模型 <code>/api/pull</code>、删模型 <code>/api/delete</code> 被网关<b>默认拒绝（403）</b>。<br>
-    · 多人同时用会互相抢显存和内存；手机上想轻快，模型选 <code>xiaojiu9b</code>。
+    · 多人同时用会互相抢显存和内存；手机上想轻快，模型选 <code>local-assistant-9b</code>。
   </div></details>
 </div>
 </div>
@@ -301,7 +301,7 @@ const $ = id => document.getElementById(id);
 // 页面版本号：改页面就把它一起改掉（2026-10-05 加）。
 // 用途：手机上"看不到新按钮/新逻辑"时，日志里的 `ver=` 和页面右下角能立刻告诉我们是**新版还是缓存**。
 const PAGE_VER = '<!--SRV:ver-->';
-try{ document.title = '小九网关 · ' + PAGE_VER; }catch(e){}
+try{ document.title = '助手网关 · ' + PAGE_VER; }catch(e){}
 // 把手机上的情况回报给网关日志（我这边看不到你的控制台，只能靠这个）。
 // ⚠️ 两条路一起走：`fetch` + **图片信标**（`new Image()`）—— 有些老浏览器/WebView 没有 fetch，
 //    但图片信标一定能发出去；两条都不来，就说明这台设备的 JS 根本没在跑。
@@ -404,7 +404,7 @@ async function fillPersona(){
     $('pmsg').innerHTML = '<span class="ok">已填入 ' + name + '（' + (d.chars||0) + ' 字）</span>';
   }catch(e){ $('pmsg').innerHTML = '<span class="bad">' + e + '</span>'; }
 }
-let STOPPED = false;               // 小九是否已停（Ollama 不在跑）
+let STOPPED = false;               // 助手是否已停（Ollama 不在跑）
 function clearSys(){ $('sys').value = ''; $('pmsg').textContent = '已清空 —— 现在是裸模型'; }
 function showBanner(html, danger){
   const b = $('banner');
@@ -415,7 +415,7 @@ function showBanner(html, danger){
   b.style.color = danger ? '#ffd0d0' : '#cdeed8';
   b.innerHTML = html;
 }
-// 健康检查：Ollama 一停（不管是点上面那个按钮，还是双击 停止小九.bat），
+// 健康检查：Ollama 一停（不管是点上面那个按钮，还是双击 停止模型.bat），
 // 这个页面就**停止刷新**并明确显示"已停止" —— 用户报过"网页脚本还在跑、不同步"。
 async function healthTick(){
   let up = false;
@@ -424,10 +424,10 @@ async function healthTick(){
   catch(e){ up = false; pstat('连不上网关：' + e); clientlog('健康检查失败: ' + e); }
   const was = STOPPED; STOPPED = !up;
   if(STOPPED){
-    showBanner('⏹ <b>小九已停止</b>（Ollama 没在跑）。在电脑上双击 <code>启动AstrBot.bat</code> 就能起来，'
+    showBanner('⏹ <b>助手已停止</b>（Ollama 没在跑）。在电脑上双击 <code>启动AstrBot.bat</code> 就能起来，'
                + '这个页面会在几秒内自动恢复；期间<b>资源面板已暂停刷新</b>。', true);
   } else {
-    if(was) showBanner('✅ 小九又起来了（Ollama 已就绪），面板继续刷新。', false);
+    if(was) showBanner('✅ 助手又起来了（Ollama 已就绪），面板继续刷新。', false);
     else showBanner('', false);
     if(was) loadStats();
   }
@@ -435,8 +435,8 @@ async function healthTick(){
 function ctlSay(html){ $('ctlmsg').innerHTML = html; }
 function noKeyHint(){
   // 没填 Key 时**必须让人一眼看见**：以前只往小字里塞一句话，用户以为"按了没反应"
-  showBanner('🔒 停止小九需要先填 <b>API Key</b>：把上面的 Key 粘进「API Key（口令）」那个输入框，'
-             + '点 <b>「用这个 Key」</b>，再按下面的「⏹ 停止小九」。（电脑本机上打开则不用填）', true);
+  showBanner('🔒 停止模型需要先填 <b>API Key</b>：把上面的 Key 粘进「API Key（口令）」那个输入框，'
+             + '点 <b>「用这个 Key」</b>，再按下面的「⏹ 停止模型」。（电脑本机上打开则不用填）', true);
   const k = $('keyin');
   if(k){ k.style.borderColor = '#c0392b'; k.focus();
          try{ k.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){ k.scrollIntoView(); } }
@@ -461,14 +461,14 @@ async function makeTicket(){
     showBanner('📱 手机授权码：<b style="font-size:26px;letter-spacing:3px">' + d.code + '</b>'
                + '　（' + Math.round(d.ttl / 60) + ' 分钟内有效，用一次就作废）<br>'
                + '在手机上打开 <b>' + location.origin + '/plain</b> → 把它填进「✅ 授权这台手机」→ '
-               + '以后手机点「⏹ 停止小九」就不用再填 Key 了。', false);
+               + '以后手机点「⏹ 停止模型」就不用再填 Key 了。', false);
     const k = $('ticketmsg'); if(k) k.innerHTML = '授权码 <b>' + d.code + '</b>（填到手机 /plain 页）';
   }catch(e){ ctlSay('<span class="bad">' + e + '</span>'); }
 }
-async function shutdownXiaojiu(){
-  clientlog('点击了 停止小九（Key=' + (TOKEN ? '有' : '没有') + '）');
+async function shutdownlocal-assistant(){
+  clientlog('点击了 停止模型（Key=' + (TOKEN ? '有' : '没有') + '）');
   if(!TOKEN){ noKeyHint(); return; }
-  if(!confirm('确定要停掉小九吗？\\n\\n停 Ollama（释放显存）+ 清 llama-server 残留 + 关 AstrBot。\\n' +
+  if(!confirm('确定要停掉助手吗？\\n\\n停 Ollama（释放显存）+ 清 llama-server 残留 + 关 AstrBot。\\n' +
               '网关和这个页面会留着，并提示"已停止"。')) return;
   ctlSay('正在停…');
   try{
@@ -480,7 +480,7 @@ async function shutdownXiaojiu(){
            (d.detail || []).map(x => x.what + ' → ' + x.result).join('；') + '</span>');
     if(d.gateway_stops_in){
       STOPPED = true;                 // 停止面板轮询（网关马上要没了）
-      showBanner('⏹ <b>小九已全部停止</b> —— 网关（这个页面）将在 <b>'
+      showBanner('⏹ <b>助手已全部停止</b> —— 网关（这个页面）将在 <b>'
                  + d.gateway_stops_in + ' 秒</b>后关闭，之后本页会连不上。<br>'
                  + '要重新启动：在电脑上双击 <code>启动局域网API.bat</code>（只起网关）'
                  + '或 <code>启动AstrBot.bat</code>（起整套）。', true);
@@ -559,7 +559,7 @@ async function loadModels(){
       o.value = m.name; o.textContent = m.name + '  (' + (m.size/1e9).toFixed(1) + ' GB)'; sel.appendChild(o); });
     $('curl').textContent =
       'curl.exe ' + base + '/v1/chat/completions -H "Authorization: Bearer <KEY>" ^\\n' +
-      '  -H "Content-Type: application/json" -d "{\\"model\\":\\"' + (sel.value||'xiaojiu9b:latest') +
+      '  -H "Content-Type: application/json" -d "{\\"model\\":\\"' + (sel.value||'local-assistant-9b:latest') +
       '\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"你好\\"}]}"';
   }catch(e){ $('smsg').innerHTML = '<span class="bad">拉模型列表失败：' + e + '</span>'; }
 }
@@ -617,7 +617,7 @@ loadKey(); loadModels();
 // 资源面板：每 3 秒刷一次，但**页面切到后台就不请求**（手机锁屏/切 App 时完全不耗）
 function statsTick(){ if(!document.hidden && !STOPPED) loadStats(); }   // 停了/切后台就不拉
 statsTick(); setInterval(statsTick, 3000);
-healthTick(); setInterval(healthTick, 5000);   // 小九一停，5 秒内页面就会显示"已停止"并停手
+healthTick(); setInterval(healthTick, 5000);   // 助手一停，5 秒内页面就会显示"已停止"并停手
 // 回到前台/重新获得焦点都立刻拉一次（手机上切走再回来，定时器可能被系统冻结过）
 ['visibilitychange', 'focus', 'pageshow'].forEach(function(ev){
   window.addEventListener(ev, function(){
@@ -632,7 +632,7 @@ setTimeout(function(){
             + ' hidden=' + document.hidden + ' 屏宽=' + window.innerWidth);
   $('pver').textContent = PAGE_VER;
   if(!has){
-    showBanner('🔒 这一页<b>还没有填 Key</b>：停止小九用不了。在电脑上打开 '
+    showBanner('🔒 这一页<b>还没有填 Key</b>：停止模型用不了。在电脑上打开 '
                + '<code>http://127.0.0.1:11435/</code> 复制 Key → 粘进上面「API Key（口令）」框 '
                + '→ 点「用这个 Key」。填一次就记住了（存在手机本地）。', true);
   }
@@ -649,7 +649,7 @@ def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> s
     这一页只用 HTML：
       · 数字由**服务端渲染**；
       · `<meta http-equiv="refresh" content="3">` **每 3 秒自己重载** ⇒ 数字会动；
-      · 停止小九 = **表单 POST**（表单不需要 JS）。
+      · 停止模型 = **表单 POST**（表单不需要 JS）。
     """
     cpu = st.get("cpu_pct")
     mem = st.get("mem") or {}
@@ -680,7 +680,7 @@ def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> s
 <!-- 这一页**故意没有一行 JavaScript**：给"会删掉脚本"的浏览器用。
      数字靠服务端渲染 + 这行 meta 每 3 秒自动重载来更新。 -->
 <meta http-equiv="refresh" content="3">
-<title>小九控制台（不用脚本版）</title>
+<title>助手控制台（不用脚本版）</title>
 <style>
  body{{font:15px/1.7 system-ui,"Microsoft YaHei",sans-serif;margin:0;padding:16px;
       background:#0f1115;color:#e6e6e6}}
@@ -700,7 +700,7 @@ def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> s
  .hint{{color:#8b93a1;font-size:12.5px}}
  a{{color:#7aa2f7}}
 </style></head><body><div class="w">
-<h1>⏹ 小九控制台（不用脚本版）</h1>
+<h1>⏹ 助手控制台（不用脚本版）</h1>
 <div class="sub">这一页<b>一行 JavaScript 都没有</b>，所以"会删脚本的浏览器"也能用。
   数字由服务端渲染，靠 <code>&lt;meta refresh&gt;</code> 每 3 秒重载更新（这一页刷新时间 {when}）。</div>
 
@@ -713,9 +713,9 @@ def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> s
 
 <div class="card">
   <div class="hint" style="margin-bottom:6px">
-    停止小九 ＝ 双击 <code>停止小九.bat</code> 的三步：停 Ollama（释放显存）+
+    停止模型 ＝ 双击 <code>停止模型.bat</code> 的三步：停 Ollama（释放显存）+
     清 llama-server 残留 + 关 AstrBot，**并且 5 秒后连网关自己也关掉**
-    （＝ 用户要的"所有小九进程都关闭"）。这 5 秒是留给你看结果的。<br>
+    （＝ 用户要的"所有助手进程都关闭"）。这 5 秒是留给你看结果的。<br>
     要重新启动：电脑上双击 <code>启动局域网API.bat</code>（只起网关）或
     <code>启动AstrBot.bat</code>（起对话整套）。<br>
     {ok_html}
@@ -723,7 +723,7 @@ def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> s
   <form method="post" action="/__shutdown">
     <input name="key" type="password" placeholder="把 Key 粘在这里（或先做下面的授权）">
     <div>
-      <button type="submit">⏹ 停止小九</button>
+      <button type="submit">⏹ 停止模型</button>
       <button type="submit" name="dry" value="1">先看看会停哪些</button>
     </div>
   </form>

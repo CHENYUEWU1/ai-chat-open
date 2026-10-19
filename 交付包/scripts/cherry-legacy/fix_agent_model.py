@@ -5,7 +5,7 @@
 
 为什么需要这个脚本：
     Cherry Studio 有两个内置「智能体」(agent 表) —— Cherry 小助手 / 产品反馈，
-    它们默认绑定了 ollama::xiaojiu:latest（4B）。Cherry Studio 启动时会预热
+    它们默认绑定了 ollama::local-assistant:latest（4B）。Cherry Studio 启动时会预热
     智能体的模型，于是每次开软件都会把 4B 拉进显存，占掉 2.7 GB，
     并且 ollama ps 里看到的是 4B 而不是你真正在聊的 9B。
 
@@ -24,9 +24,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-DB = Path(r"E:\本地ai\CherryStudio\data\Data\cherrystudio.sqlite")
-OLD = "ollama::xiaojiu:latest"      # 4B
-NEW = "ollama::xiaojiu9b:latest"    # 9B
+DB = Path(r"C:\LocalAI-Assistant\CherryStudio\data\Data\cherrystudio.sqlite")
+OLD = "ollama::local-assistant:latest"      # 4B
+NEW = "ollama::local-assistant-9b:latest"    # 9B
 
 
 def show(db):

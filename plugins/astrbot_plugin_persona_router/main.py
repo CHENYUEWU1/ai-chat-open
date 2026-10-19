@@ -2,7 +2,7 @@
 """按平台固定人格（persona router）。
 
 为什么需要（2026-09-24 用户要求）：
-    "微信聊天就固定外向小九，然后其他平台还是和之前一样想改什么就改什么"
+    "微信聊天就固定外向助手，然后其他平台还是和之前一样想改什么就改什么"
 
     AstrBot **没有**"按平台指定人格"的配置项 —— 人格只有全局一份
     （`agent_runner.config.persona`），改它会把所有平台一起改掉。
@@ -48,11 +48,11 @@ from astrbot.api.event import AstrMessageEvent, filter
 #
 # 格式：{"平台 id 前缀": "人格名"}
 #   平台 id 就是 umo 的第一段，例如
-#     weixin_personal_example:FriendMessage:xxx@im.wechat  →  平台 id = weixin_personal_example
+#     weixin_personal_keej:FriendMessage:xxx@im.wechat  →  平台 id = weixin_personal_keej
 #   前缀匹配（startswith），所以写 "weixin" 能一次覆盖所有微信系适配器
-#   （不同适配器生成的平台 id 可能不同）。
+#   （平台 id 会变：这个项目就从 weixin_personal_lfhn 变成过 weixin_personal_keej，见坑 37）。
 DEFAULT_MAP = {
-    "weixin": "示例角色D",      # 微信 → 固定外向小九（用户要求）
+    "weixin": "外向-助手",      # 微信 → 固定外向助手（用户要求）
 }
 # 没列在这里的平台一律**不碰**：Telegram / WebUI 照旧，想换人格随时换。
 

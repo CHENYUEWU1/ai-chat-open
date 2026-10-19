@@ -182,7 +182,7 @@ def chat(model: str, messages: list, options: dict | None = None,
 
 if __name__ == "__main__":
     # 直接跑就是体检：python ollama_guard.py
-    sys.path.insert(0, r"E:\本地ai")
+    sys.path.insert(0, r"C:\LocalAI-Assistant")
     try:
         from console_utf8 import console_utf8
         console_utf8()

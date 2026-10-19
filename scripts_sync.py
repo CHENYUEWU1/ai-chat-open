@@ -14,7 +14,7 @@ r"""
 
     而**项目根原本没有 `scripts\` 目录** —— 脚本都在根，`交付包\scripts\` 才是副本。
     所以照 `05` / `03` 敲命令会全部失败：
-        python: can't open file 'E:\本地ai\scripts\astrbot_setup.py': [Errno 2] ...
+        python: can't open file 'C:\LocalAI-Assistant\scripts\astrbot_setup.py': [Errno 2] ...
 
     这和坑 23（`install_fetch_plugin.py` 从项目根消失）是同一类问题：
     **文档描述的目录结构不是真实存在的目录结构。**
@@ -60,8 +60,8 @@ ROOT_MARKER = "启动AstrBot.bat"
 # 用显式后缀而不是 `*` —— 免得把未来出现的临时文件也镜像进去。
 #
 # 为什么不镜像 .bat 到项目根 `scripts\`：
-#   .bat 里全是硬编码绝对路径（`set "ASTRBOT_ROOT=E:\本地ai\AstrBotData"`、
-#   `"E:\本地ai\astrbot_setup.py"`），从哪个目录双击都一样能跑，
+#   .bat 里全是硬编码绝对路径（`set "ASTRBOT_ROOT=C:\LocalAI-Assistant\AstrBotData"`、
+#   `"C:\LocalAI-Assistant\astrbot_setup.py"`），从哪个目录双击都一样能跑，
 #   所以 `scripts\启动AstrBot.bat` 是**纯粹的重复文件**，没有存在价值。
 #   文档里说到 .bat 一律写「双击 `启动AstrBot.bat`」（不带路径前缀）。
 #
@@ -88,7 +88,7 @@ MIRRORS = (
     # 「不允许存在没有任何东西会校验的副本」。
     #
     # `allow_extra: True` —— 交付包的 model-config\ 里还有两个**只在包里存在**
-    # 的文件（`template_original.jinja`、`角色卡-小九.json`），
+    # 的文件（`template_original.jinja`、`角色卡-助手.json`），
     # 它们不是根目录文件的副本，所以既不能报"多余"，更不能被删掉。
     {
         "dir": ROOT / "交付包" / "model-config",

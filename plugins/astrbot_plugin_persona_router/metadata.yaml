@@ -1,8 +1,8 @@
 name: astrbot_plugin_persona_router
 display_name: 按平台固定人格
 desc: 让某个平台（如微信）固定用指定人格，不碰全局人格设置 —— 其他平台照旧想换就换。配置在 AstrBotData\data\persona_router.json。
-short_desc: 微信固定外向小九，其他平台不受影响
-author: 小九部署
+short_desc: 微信固定外向助手，其他平台不受影响
+author: 助手部署
 version: 1.0.0
 repo: ""
 astrbot_version: ">=4.0.0"

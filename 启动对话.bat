@@ -1,9 +1,9 @@
 @echo off
 chcp 936 >nul
-title 本地 AI 助手 - 小九（无审查版）
+title 本地 AI 助手 - 助手（无审查版）
 setlocal
 
-set "OLLAMA_MODELS=E:\本地ai\models"
+set "OLLAMA_MODELS=C:\LocalAI-Assistant\models"
 set "OLLAMA_FLASH_ATTENTION=1"
 set "OLLAMA_KV_CACHE_TYPE=q8_0"
 set "OLLAMA_HOST=127.0.0.1:11434"
@@ -14,7 +14,7 @@ REM  这份 .bat 必须存成 GBK + CRLF（见 02 坑 5）；
 REM  分支一律用 goto，别把 goto 写进括号块内部（见 02 坑 16）。
 REM ============================================================
 echo ============================================
-echo    本地 AI 助手 - 小九
+echo    本地 AI 助手 - 助手
 echo ============================================
 echo.
 echo   选模型：
@@ -30,12 +30,12 @@ if "%pick%"=="3" goto quit
 goto use9b
 
 :use9b
-set "MODEL=xiaojiu9b"
+set "MODEL=local-assistant-9b"
 set "MTEXT=Qwen3.5-9B-Uncensored"
 goto start_ollama
 
 :use35b
-set "MODEL=qwen36-35b-uncensored"
+set "MODEL=local-assistant-35b"
 set "MTEXT=Qwen3.6-35B-A3B (MoE)"
 goto start_ollama
 
@@ -50,20 +50,20 @@ REM 若服务未运行则启动
 tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul
 if not errorlevel 1 goto ready
 echo [启动] Ollama 服务...
-start "" /B "E:\本地ai\ollama\ollama.exe" serve
+start "" /B "C:\LocalAI-Assistant\ollama\ollama.exe" serve
 ping -n 7 127.0.0.1 >nul
 
 :ready
 echo ============================================
-echo    本地 AI 助手 - 小九
+echo    本地 AI 助手 - 助手
 echo    模型: %MTEXT%
 echo ============================================
 echo.
 echo [就绪] 直接打字聊天，输入 /bye 退出
-if "%MODEL%"=="xiaojiu9b" echo [提示] 已关闭思考模式，响应约 1 秒
-if not "%MODEL%"=="xiaojiu9b" echo [提示] 35B 第一条要读提示，等 30-60 秒是正常的
+if "%MODEL%"=="local-assistant-9b" echo [提示] 已关闭思考模式，响应约 1 秒
+if not "%MODEL%"=="local-assistant-9b" echo [提示] 35B 第一条要读提示，等 30-60 秒是正常的
 echo.
-"E:\本地ai\ollama\ollama.exe" run %MODEL% --think=false
+"C:\LocalAI-Assistant\ollama\ollama.exe" run %MODEL% --think=false
 
 :end
 endlocal

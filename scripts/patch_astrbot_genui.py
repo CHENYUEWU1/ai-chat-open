@@ -45,9 +45,9 @@ from safe_write import read_text_raw, write_bytes, write_text
 
 console_utf8()   # GBK 控制台下的兜底，见 console_utf8.py
 
-ROOT = Path(r"E:\本地ai\AstrBot\AstrBot_4.28.1_windows_amd64_portable")
+ROOT = Path(r"C:\LocalAI-Assistant\AstrBot\AstrBot_4.28.1_windows_amd64_portable")
 TARGET = ROOT / ("backend/app/astrbot/core/platform/sources/webchat/request_flags.py")
-BAT = Path(r"E:\本地ai\启动AstrBot.bat")
+BAT = Path(r"C:\LocalAI-Assistant\启动AstrBot.bat")
 
 MARK = "patch_astrbot_genui.py"
 
