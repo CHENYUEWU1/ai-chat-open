@@ -3,13 +3,13 @@
 import datetime
 
 # 网关主页不包含密钥；API Key 只由服务端的 /__key 路由按访问来源决定是否下发。
-PAGE_VER = "2026-10-19-ui3"      # 改页面就改它（服务端与页面共用这一个来源）
+PAGE_VER = "2026-10-19-ui4"      # 改页面就改它（服务端与页面共用这一个来源）
 
 PAGE = """<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>小九 · 本地 AI 工作台</title>
-<meta name="description" content="小九本地 AI 工作台：在自己的设备上运行模型，体验对话、监控算力并连接常用客户端。">
+<title>消费级电脑本地部署的局域网 AI 助手</title>
+<meta name="description" content="在消费级 Windows 电脑上运行本地 AI 模型，通过可信局域网连接浏览器、手机和兼容客户端。">
 <meta name="theme-color" content="#090d18">
 <!-- 不需要 JS 的探针①：JS 关掉的浏览器才会取它（用来区分"JS 关了"还是"脚本被拦了"） -->
 <noscript><link rel="stylesheet" href="/__nojs">
@@ -433,7 +433,7 @@ const $ = id => document.getElementById(id);
 // 页面版本号：改页面就把它一起改掉（2026-10-05 加）。
 // 用途：手机上"看不到新按钮/新逻辑"时，日志里的 `ver=` 和页面右下角能立刻告诉我们是**新版还是缓存**。
 const PAGE_VER = '<!--SRV:ver-->';
-try{ document.title = '小九 · 本地 AI 工作台 · ' + PAGE_VER; }catch(e){}
+try{ document.title = '消费级电脑本地部署的局域网 AI 助手 · ' + PAGE_VER; }catch(e){}
 // 把手机上的情况回报给网关日志（我这边看不到你的控制台，只能靠这个）。
 // ⚠️ 两条路一起走：`fetch` + **图片信标**（`new Image()`）—— 有些老浏览器/WebView 没有 fetch，
 //    但图片信标一定能发出去；两条都不来，就说明这台设备的 JS 根本没在跑。
@@ -820,7 +820,7 @@ def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> s
 <!-- 这一页**故意没有一行 JavaScript**：给"会删掉脚本"的浏览器用。
      数字靠服务端渲染 + 这行 meta 每 3 秒自动重载来更新。 -->
 <meta http-equiv="refresh" content="3">
-<title>小九控制台（不用脚本版）</title>
+<title>局域网 AI 助手控制台（无脚本版）</title>
 <style>
  body{{font:15px/1.7 system-ui,"Microsoft YaHei",sans-serif;margin:0;padding:16px;
       background:#0f1115;color:#e6e6e6}}
@@ -840,7 +840,7 @@ def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> s
  .hint{{color:#8b93a1;font-size:12.5px}}
  a{{color:#7aa2f7}}
 </style></head><body><div class="w">
-<h1>⏹ 小九控制台（不用脚本版）</h1>
+<h1>⏹ 局域网 AI 助手控制台（无脚本版）</h1>
 <div class="sub">这一页<b>一行 JavaScript 都没有</b>，所以"会删脚本的浏览器"也能用。
   数字由服务端渲染，靠 <code>&lt;meta refresh&gt;</code> 每 3 秒重载更新（这一页刷新时间 {when}）。</div>
 

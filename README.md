@@ -1,6 +1,6 @@
-<h1 align="center">小九 · 本地 AI 工作台</h1>
+<h1 align="center">消费级电脑本地部署的局域网 AI 助手</h1>
 
-<p align="center"><strong>把本地模型带到浏览器、手机和局域网设备上。</strong></p>
+<p align="center"><strong>用自己的电脑运行 AI，并让手机和可信局域网设备轻松接入。</strong></p>
 
 <p align="center">Ollama · AstrBot · 局域网 API · Windows</p>
 
@@ -12,7 +12,7 @@
 
 ---
 
-小九是一套围绕本地 Ollama 模型搭建的个人 AI 工作台。它把聊天界面、设备接入、运行状态和可选联网工具放在一起，适合希望自己管理模型与数据流的 Windows 用户。
+这是一个面向消费级电脑的本地 AI 助手项目，围绕 Ollama 模型提供聊天界面、局域网设备接入、运行状态面板和可选联网工具，适合希望在自己的 Windows 电脑上运行模型并管理数据流的用户。
 
 ## 你可以用它做什么
 
