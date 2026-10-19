@@ -1,0 +1,8 @@
+name: astrbot_plugin_fetch_url
+display_name: 读网页（fetch_url）
+desc: 给模型加一个 fetch_url 工具 —— 打开网页读正文，补上 AnySearch 只能看摘要的短板。不需要 API Key、不需要浏览器。
+short_desc: 让模型能读网页全文
+author: 小九部署
+version: 1.0.0
+repo: ""
+astrbot_version: ">=4.0.0"

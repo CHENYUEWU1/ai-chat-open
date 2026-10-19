@@ -1,0 +1,62 @@
+# ===== 本地运行时 / 大体积资源（不要提交）=====
+models/
+ollama/
+downloads/
+data/
+AstrBot/
+AstrBotData/
+*.gguf
+
+# ===== 私有素材：人格正文、成人向素材、历史备份、真实聊天 =====
+personas/
+不要看/
+_备份/
+聊天文件/
+*.jsonl
+persona_samples*.txt
+_AB_*.txt
+交付包/personas/
+角色卡-小九.json
+交付包/model-config/角色卡-小九.json
+
+# ===== 私人交接资料与机器专属说明（保留本地，不进入公开仓库）=====
+/08-当前阶段.md
+/09-交接-*.md
+/给AI的完整说明书.md
+/部署-给AI看.md
+/重构必读-改前先看.md
+/愿望清单与升级路线.md
+/本地AI部署方案.md
+/缺失内容说明.md
+/开源版.txt
+/交付包/给AI看的/
+/交付包/给我看的/
+
+# ===== 凭据 / 口令 / 日志（永不提交）=====
+*口令*.txt
+*key*.txt
+*api*key*
+token*.txt
+*.log
+*.db
+*.db-journal
+
+# ===== 本地临时文件 =====
+__pycache__/
+*.pyc
+*.pyo
+*.zip
+*.apk
+*.apk.zip
+apk/
+交付包/给AI看的/单文件版-*.md
+*.exe
+*.dll
+_msg.txt
+_commitmsg.txt
+commitmsg*.txt
+_probe*.py
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

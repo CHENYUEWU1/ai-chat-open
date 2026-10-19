@@ -1,0 +1,65 @@
+# ── 换行与二进制：别让"换一台电脑"改坏文件 ─────────────────────────
+#
+# 为什么需要这个文件：
+#   本项目的 .bat 是 **GBK + CRLF**，cmd 对裸 LF 会吃字符、报一堆
+#   `not recognized`（见 02-技术踩坑档案.md 坑 5）。
+#   但仓库以前**没有 .gitattributes** —— 换行怎么处理完全取决于
+#   每台机器上的 `core.autocrlf`：
+#
+#       这台机器   core.autocrlf = false   → 仓库里存什么就是什么（碰巧对）
+#       新克隆的机器 默认往往是 true / input → git 会自己转换
+#
+#   也就是：**同样的仓库，在不同机器上克隆出来可能不一样，而且不报错。**
+#   和坑 23 / 24 / 26 是同一个病 —— 规则没钉死在仓库里，就得靠每台机器自觉。
+#
+# 解法：把换行规则写进仓库，谁克隆都一样。
+#
+# ⚠️ 顺序很重要：gitattributes 是**后面的规则覆盖前面的**。
+#    `* -text` 必须写在最前面，具体规则写后面 —— 写反了会把
+#    `*.bat` 的 text 属性也变成 unset，于是 `eol=crlf` **静默失效**
+#    （实测踩过：`git check-attr text eol -- 启动AstrBot.bat` 返回
+#      `text: unset` + `eol: crlf`，看起来设了，其实不生效）。
+
+# 默认：仓库统一 **LF**，检出也一律 LF。
+#
+# ⚠️ 这一行 2026-09-26 改过，改的原因（别照旧印象理解）：
+#   原来写的是 `* -text`（＝"不做任何换行转换"），当时的注释说"本项目 .md 用 CRLF"。
+#   实测发现**仓库里的事实和那句注释是反的**：
+#       HEAD 里 README.md 存的是 CRLF；
+#       而长时间使用下来，磁盘上的 .md 全变成了 LF（脚本用 Python
+#       `write_text` 写过一遍就会这样 —— Windows 上它默认把 \n 写成 \r\n，
+#       但一旦有脚本用 `newline="\n"` 或别的工具重写，就会变成 LF）。
+#   于是 git 每次都在 CRLF↔LF 之间反复转换，**每个 .md 的 diff 都显示
+#   "整篇 279 行全改"，而真实改动只有 1 行** —— 这正是注释里担心的那个假提交，
+#   只不过方向反了，而且已经发生。
+#   解法不是继续 `-text`（那只会让这个漂移永远存在），而是**把规则钉死**：
+#   仓库 = LF，检出 = LF，谁克隆都一样，脚本再怎么写也不会产生假 diff。
+#   已做：`git add --renormalize .` 把索引里的 CRLF 全部改成 LF。
+#   （同时给 `build_single_file.py` / `organize_package.py` 的写文件补了
+#     `newline="\n"` —— 否则它们下次重建又会把 CRLF 写回来。）
+#
+#   二进制不受影响：`text=auto` 会自己识别，识别为二进制的文件不做换行转换。
+* text=auto eol=lf
+
+# Windows 批处理：**必须 CRLF**。
+#   仓库内统一存 LF，检出时自动变 CRLF —— 这样在哪台机器上都对，
+#   也不会因为 autocrlf 设置不同而产生"整文件都改了"的假 diff。
+#   （GBK 编码不受影响：GBK 的次字节范围是 0x40–0xFE，不含 0x0A/0x0D，
+#     所以按行转换换行**不可能**碰到汉字中间。）
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# PowerShell：同样要 CRLF（顺带说明：.ps1 还必须是 **UTF-8 带 BOM**，
+#   那是编码问题，git 管不了，见 03-文件与脚本说明.md）
+*.ps1  text eol=crlf
+
+# 二进制：不去 diff / 合并它们
+*.zip    binary
+*.gguf   binary
+*.exe    binary
+*.dll    binary
+*.db     binary
+*.sqlite binary
+*.png    binary
+*.jpg    binary
+*.ico    binary
