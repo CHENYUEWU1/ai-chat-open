@@ -1,8 +1,8 @@
-﻿# 小九人格切换器 —— 交互式菜单
+﻿# 助手人格切换器 —— 交互式菜单
 $ErrorActionPreference = 'Stop'
-$P = 'E:\本地ai\personas'
-$CherryExe = 'E:\本地ai\CherryStudio\Cherry-Studio-CN-portable.exe'
-$Applier = 'E:\本地ai\apply_persona.py'
+$P = 'C:\LocalAI-Assistant\personas'
+$CherryExe = 'C:\LocalAI-Assistant\CherryStudio\Cherry-Studio-CN-portable.exe'
+$Applier = 'C:\LocalAI-Assistant\apply_persona.py'
 
 function Get-Personas {
     Get-ChildItem "$P\*.txt" -File | Sort-Object Name | ForEach-Object {
@@ -16,7 +16,7 @@ function Get-Personas {
 function Show-Header {
     Clear-Host
     Write-Host '==================================================' -ForegroundColor Cyan
-    Write-Host '   小九 · 人格切换' -ForegroundColor Cyan
+    Write-Host '   助手 · 人格切换' -ForegroundColor Cyan
     Write-Host '==================================================' -ForegroundColor Cyan
     Write-Host ''
 }
