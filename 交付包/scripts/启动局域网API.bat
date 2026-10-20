@@ -30,7 +30,7 @@ rem ↓ 这一行是**安全关键**：只绑本机，局域网里没人能直接访问 Ollama
 set "OLLAMA_HOST=127.0.0.1:11434"
 
 echo.
-echo   [1/2] 启动 Ollama（只听 127.0.0.1:11434，外面碰不到）...
+echo   [1/3] 启动 Ollama（只听 127.0.0.1:11434，外面碰不到）...
 start "ollama" /min "C:\LocalAI-Assistant\ollama\ollama.exe" serve
 timeout /t 6 /nobreak >nul
 
@@ -38,7 +38,7 @@ rem ↓ 开机预热（2026-10-08 加，方案 C）：先把模型读进来并保温，聊天时就不用等冷
 rem   默认预热 35B（约 30 秒就绪）；想换热身的模型，改 warmup.py 顶部的 WARM_MODEL。
 start "warmup" /min python "C:\LocalAI-Assistant\warmup.py"
 
-echo   [2/2] 启动局域网网关（0.0.0.0:11435，要口令）...
+echo   [2/3] 启动局域网网关（0.0.0.0:11435，要口令）...
 echo.
 echo   ================================================================
 echo    别的设备上填： http://^<这台电脑的IP^>:11435
@@ -49,6 +49,11 @@ echo      New-NetFirewallRule -DisplayName "Ollama 网关(局域网)" -Direction Inbo
 echo        -Action Allow -Protocol TCP -LocalPort 11435 -RemoteAddress LocalSubnet
 echo   ================================================================
 echo.
+
+
+rem ---- 网页聊天台（2026-10-20 加）：独立进程 11437。已在跑时 workbench.py 会自己安静退出 ----
+echo   [3/3] 启动网页聊天台（11437，独立于网关）...
+start "webchat" /min python "%~dp0workbench.py"
 
 python "C:\LocalAI-Assistant\ollama_gateway.py" --host 0.0.0.0 --port 11435
 

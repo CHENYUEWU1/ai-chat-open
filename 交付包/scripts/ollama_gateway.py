@@ -273,6 +273,10 @@ def sys_stats() -> dict:
             "last_chat": dict(LAST_CHAT),
             "last_chat_line": last_chat_line(),
             "strip": ("on" if strip_limit_on() else "off"),   # 长度约束消毒开关
+        "memory": ("on" if memory_on() else "off"),        # 会话记忆开关（2026-10-20 加）
+                                                           # ⚠️ 键名必须是 memory，不能叫 mem ——
+                                                           #    `mem` 已被"内存占用字典"占用，
+                                                           #    覆盖它会让面板渲染 `mem['used_gb']` 崩 ✓
             "tools": ("on" if tools_on() else "off"),        # 工具开关（on=保留）
             "cont": ("on" if continue_on() else "off"),      # 自动续写
             "mode": send_mode(),                             # 发送方式（三选一）
@@ -444,6 +448,68 @@ def save_temperature(v: str) -> str:
 # 工具开关（2026-10-18 加）：`on`=保留客户端带来的 tools，`off`=**剥掉**（客户端就退回纯聊天）。
 # 为什么要有它：实测同一提示，不带 tools 出 349 字、带 tools 只出 32 字前言 + finish_reason=tool_calls
 # ⇒ 用户看到的"回复越来越短、最后半句截断"，就是模型把正文换成了工具调用。
+# ⚠️ 2026-10-20 加：**点面板上的链接就自动把网页聊天台拉起来**（用户要求"点窗口时自动启动"）。
+#    做法：面板那条链接改成指向本网关的 `/chat`，它先看 11437 通不通，不通就 Popen 起
+#    workbench.py，等端口起来后 302 跳到聊天台（带上它的口令）✓
+#    为什么放在网关里而不是页面 JS：手机可能拦内联脚本，服务端跳转不挑浏览器 ✓
+# ⚠️ 2026-10-20 改（GPT 审查第 3 条）：**不写死绝对路径** —— 按网关自身所在目录定位
+#    workbench.py，并且把 `AI_CHAT_DIR` 显式传给子进程，保证"网关看到的数据目录"
+#    和"聊天台实际用的数据目录"是同一个（原来换盘/换目录就会起不来或起错库）✓
+WORKBENCH_PY = Path(__file__).resolve().parent / "workbench.py"
+WORKBENCH_DIR = Path(os.environ.get("AI_CHAT_DIR") or r"%LOCALAPPDATA%\AIWebChat")
+WORKBENCH_PORT = 11437
+_WB_LOCK = threading.Lock()
+
+
+def _port_open(port: int, host: str = "127.0.0.1", timeout: float = 0.4) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def workbench_token() -> str:
+    r"""读聊天台自己的口令（它首次启动会生成）；读不到就等一会儿再读 ✓"""
+    f = WORKBENCH_DIR / "口令.txt"
+    for _ in range(20):
+        try:
+            t = f.read_text(encoding="utf-8").strip()
+            if t:
+                return t
+        except Exception:
+            pass
+        time.sleep(0.15)
+    return ""
+
+
+def ensure_workbench() -> bool:
+    r"""确保 11437 在听：已经在听就返回 True；没起就拉起来并等它ready（最多 15 秒）✓"""
+    if _port_open(WORKBENCH_PORT):
+        return True
+    with _WB_LOCK:
+        if _port_open(WORKBENCH_PORT):        # 双检：两个请求同时点击别起两份
+            return True
+        if not WORKBENCH_PY.exists():
+            return False
+        try:
+            subprocess.Popen(
+                [sys.executable, "-u", str(WORKBENCH_PY)],
+                cwd=str(WORKBENCH_PY.parent),
+                env={**os.environ, "AI_CHAT_DIR": str(WORKBENCH_DIR)},
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except Exception as e:
+            sys.stderr.write(f"  [聊天台] 启动失败：{type(e).__name__}\n")
+            return False
+        for _ in range(60):                   # 最多等 15 秒（冷启动要建库/备份）
+            time.sleep(0.25)
+            if _port_open(WORKBENCH_PORT):
+                return True
+    return False
+
+
 TOOLS_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关工具开关.txt")
 TOOLS_CHOICES = ("on", "off")
 TOOLS_DEFAULT = "on"
@@ -470,6 +536,48 @@ def save_tools(v: str) -> str:
     except Exception as e:
         sys.stderr.write(f"  [工具开关] 写设置失败：{type(e).__name__}\n")
     return "on" if tools_on() else "off"
+
+# ⚠️ 2026-10-20 加：**会话记忆独立开关**（网页面板可点，默认关）。
+#    起因：① `--memory` 是启动参数，改一次要重启网关；
+#          ② 更严重 —— 它和「边流边洗」冲突：兼容模式分支**提前 return**，
+#             记忆记录写在那之后 ⇒ 记忆是死代码（实测 8 轮后模型答"未知"，
+#             记忆文件根本没生成；关掉 compat 立刻正常）。和当年"续写在兼容模式
+#             下是死代码"是同一类坑。
+#    规则：**面板开关 on 或启动加 `--memory`** 都算开；`--no-memory` 一票否决 ✓
+MEM_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关会话记忆.txt")
+MEM_CHOICES = ("on", "off")
+MEM_DEFAULT = "off"
+
+
+def memory_on() -> bool:
+    r"""网关自己的会话记忆开关（实时读 ⇒ 网页上改完下一条就生效）。"""
+    try:
+        v = MEM_FILE.read_text(encoding="utf-8-sig").strip().lower()
+        if v in MEM_CHOICES:
+            return v == "on"
+    except Exception:
+        pass
+    return MEM_DEFAULT == "on"
+
+
+def save_memory(v: str) -> str:
+    v = (v or "").strip().lower()
+    if v not in MEM_CHOICES:
+        v = MEM_DEFAULT
+    try:
+        MEM_FILE.parent.mkdir(parents=True, exist_ok=True)
+        MEM_FILE.write_text(v + "\n", encoding="ascii", newline="\n")
+    except Exception as e:
+        sys.stderr.write(f"  [记忆开关] 写设置失败：{type(e).__name__}\n")
+    return "on" if memory_on() else "off"
+
+
+def session_active(srv) -> bool:
+    r"""这一轮记不记会话：面板开关 on **或** 启动带 `--memory`；`--no-memory` 一票否决。"""
+    if getattr(srv, "session_blocked", False):
+        return False
+    return bool(getattr(srv, "session_flag", False)) or memory_on()
+
 
 STRIP_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关长度消毒.txt")
 STRIP_CHOICES = ("on", "off")
@@ -1335,6 +1443,9 @@ def switches_html() -> str:
                 "删掉历史里「退化连发」的残缺回复"),
         _sw_row("✂️ 长度约束消毒", strip_limit_on(), "/__strip",
                 "删掉 system 里「最多N个短句 / 控制在X-Y字」这类限制"),
+        _sw_row("🧠 会话记忆", memory_on(), "/__mem",
+                "网关自己记历史 + 超 48000 token 自动滚动摘要（手机 App 自带记忆时可不关；"
+                "裸 API 客户端**必须开**，否则每轮都从零开始）"),
     ])
 
 STREAMSAN_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关流式洗文本.txt")
@@ -2100,8 +2211,18 @@ def render_page(h=None) -> str:
     def bar(p):
         return "" if p is None else f"width:{max(0.0, min(100.0, p)):.1f}%;background:#2f6df6"
 
+    # ⚠️ 2026-10-20：网页聊天台的跳转链接 —— 按**当前 Host** 拼（手机用 IP 打开就得到 IP，
+    #    本机用 127.0.0.1 打开就得到 127.0.0.1），端口固定 11437，不依赖 JS ✓
+    _host = "127.0.0.1"
+    try:
+        _raw = (h.headers.get("Host") or "") if h is not None else ""
+        _host = (_raw.split(":")[0] or "127.0.0.1")
+    except Exception:
+        pass
     rep = {
         "<!--SRV:ver-->": PAGE_VER,
+        # 指向网关自己的 /chat：它会**先自动拉起**聊天台，再 302 跳过去（2026-10-20）
+        "<!--SRV:chatlink-->": "/chat",
         "<!--SRV:cpu-->": "读取中…" if cpu is None else f"{cpu:.1f}%",
         "<!--SRV:cpu_w-->": bar(cpu),
         "<!--SRV:mem-->": "" if not mem else
@@ -4077,6 +4198,12 @@ class Handler(BaseHTTPRequestHandler):
             self._redirect("/?ok=tools")
             return
 
+        if path == "/__mem":
+            got = save_memory((fields.get("v") or "").strip())
+            self.server.log(f"[会话记忆] {ip} 把它设成 {got}（下一条消息生效）")
+            self._redirect("/?ok=mem")
+            return
+
         if path == "/__strip":
             got = save_strip_limit((fields.get("v") or "").strip())
             self.server.log(f"[长度消毒] {ip} 把它设成 {got}（下一条消息生效）")
@@ -4314,6 +4441,29 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/__auth":
             self._do_auth()
             return
+        # ---- 网页聊天台：点一下就自动拉起服务再跳过去（2026-10-20）----
+        if path == "/chat":
+            host = (self.headers.get("Host") or "").split(":")[0].strip() or "127.0.0.1"
+            ok = ensure_workbench()
+            tok = workbench_token()
+            if ok:
+                self.send_response(302)
+                self.send_header("Location", f"http://{host}:{WORKBENCH_PORT}/wc?k={tok}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                self.server.log(f"[聊天台] 已就绪，跳转 {host}:{WORKBENCH_PORT}")
+                return
+            self.server.log("[聊天台] 启动失败")
+            body = render_plain(
+                "❌ 网页聊天台没能启动。<br>"
+                "手动跑一次：<code>python E:\\本地ai\\workbench.py</code><br>"
+                "日志：<code>E:\\AI聊天台\\日志\\</code>").encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         # ---- 授权管理（2026-10-06 下午加）：换入网码 / 逐个或全部解除设备 ----
         if path == "/__peek":
             self._do_peek()
@@ -4328,7 +4478,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/__upload":
             self._do_upload()
             return
-        if path in ("/__newcode", "/__revoke", "/__think", "/__thinklog", "/__warm", "/__budget", "/__temp", "/__strip", "/__tools", "/__cont", "/__compat", "/__preset", "/__md", "/__nl", "/__hist", "/__streamsan", "/__mode"):
+        if path in ("/__newcode", "/__revoke", "/__think", "/__thinklog", "/__warm", "/__budget", "/__temp", "/__strip", "/__tools", "/__mem", "/__cont", "/__compat", "/__preset", "/__md", "/__nl", "/__hist", "/__streamsan", "/__mode"):
             self._do_access_admin(path)
             return
 
@@ -4870,10 +5020,14 @@ class Handler(BaseHTTPRequestHandler):
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
         # ---- 会话记忆：注入上一轮的滚动摘要 + 恢复历史（2026-10-05）----
+        # ⚠️ 2026-10-20：先占位，保证就算记忆关着，下面"记会话"的调用点也不会 NameError ✓
+        session_key = None
+        full_msgs = None
+        _mem_commit = None
         # 客户端只发当轮 → 这里把"摘要 + 最近几轮"补回去，让裸模型也有长期记忆。
         session_key = None
         full_msgs = None
-        if (body and self.server.session_enabled
+        if (body and session_active(self.server)
                 and path in ("/api/chat", "/v1/chat/completions")
                 and isinstance(payload, dict) and isinstance(payload.get("messages"), list)):
             session_key = self._session_key()
@@ -4911,6 +5065,28 @@ class Handler(BaseHTTPRequestHandler):
             full_msgs = _tidy(mem_sys + client_sys + hist + new_part)
             payload["messages"] = full_msgs
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+            # ⚠️⚠️ 2026-10-20 加：**把"记会话"抽成闭包，两条发送路径都调**。
+            #    起因（实测）：`--memory` + 「边流边洗」时记忆**永远是空的** ——
+            #    兼容模式分支在 3 个地方提前 `return`，而记会话的代码写在那之后，
+            #    走不到 ⇒ 第 1 轮说"记住阿岩"，第 8 轮答"未知"，`gateway_sessions.json`
+            #    根本没生成；把 compat 关掉立刻正常（第 2 轮就答对）。
+            #    这和当年"自动续写在兼容模式下是死代码"是同一类坑，修法也照抄：
+            #    抽成方法/闭包，**每条路径 return 之前都调一次** ✓
+            def _mem_commit(reply_text: str, tail_bytes: bytes) -> None:
+                try:
+                    if not session_key or full_msgs is None:
+                        return
+                    reply_ = (reply_text or "").strip()
+                    n_tok = _usage_from_tail(tail_bytes)
+                    if n_tok <= 0:
+                        n_tok = sum(_msg_tokens(m) for m in full_msgs)
+                    store_msgs = _tidy(hist + new_part + (
+                        [{"role": "assistant", "content": reply_}] if reply_ else []))
+                    self._remember(session_key, store_msgs,
+                                   (payload or {}).get("model") or "", n_tok)
+                except Exception as e:      # noqa: BLE001 —— 记失败绝不能影响这条回复
+                    self.server.log(f"记会话失败（{type(e).__name__}）")
 
         # ---- 联网搜索（2026-10-05 改：不再"只认触发词"，见 --search-mode）----
         # 只对聊天类接口做，且要能在 --no-search 时整个关掉。
@@ -5180,6 +5356,8 @@ class Handler(BaseHTTPRequestHandler):
                                       "total": round(time.time() - t_req, 2),
                                       "chars": len(_all), "aborted": False, "pending": False})
                     self.server.log(f"[兼容模式] 流式洗文本 {len(_all)} 字（边收边发）✓")
+                    if _mem_commit is not None:
+                        _mem_commit(_all, bytes(tail))   # ⚠️ return 之前必须记会话
                     return
                 if _compat:
                     _all = _retried_text or (_stat.finish() if _stat is not None else "")
@@ -5231,6 +5409,8 @@ class Handler(BaseHTTPRequestHandler):
                                           "chars": len(_pl), "aborted": False,
                                           "pending": False})
                         self.server.log(f"[兼容模式] 非流式 {len(_pl)} 字（JSON 返回）✓")
+                        if _mem_commit is not None:
+                            _mem_commit(_pl, bytes(tail))   # ⚠️ return 之前必须记会话
                         return
                     if _pl:
                         self._write_sse_text(_pl)
@@ -5255,6 +5435,8 @@ class Handler(BaseHTTPRequestHandler):
                                       "chars": len(_pl), "aborted": False, "pending": False})
                     self.server.log(f"[兼容模式] 整段 {len(_pl)} 字一次性发"
                                     f"（去 markdown、双空行压单行）✓")
+                    if _mem_commit is not None:
+                        _mem_commit(_pl, bytes(tail))   # ⚠️ return 之前必须记会话
                     return
                 # ---- 自动续写（2026-10-18）：模型"半句就 EOS"时补一次 ----
                 #    依据：用户那条真实请求 `completion_tokens=67`、finish=stop、
@@ -5322,39 +5504,11 @@ class Handler(BaseHTTPRequestHandler):
                         f"提示 {_ptok}{'（估）' if _est else ''} tok | 回复 {len(_reply)} 字"
                         + (" ★慢：首字超过 20 秒，客户端很容易超时"
                            if _ttft > 20 else ""))
-                # ---- 记会话记忆（用模型真报的 token 数当阈值信号）----
-                # 记的是**这次真正发给模型的完整消息**（含摘要与人设）——
-                # 下一轮就在这个基础上追加，客户端不用自己带历史。
+                # ---- 记会话记忆（非兼容模式这条路；兼容模式在它自己的 3 个 return 前调）----
                 if session_key and full_msgs is not None:
                     self.server._last_chat = time.time()
                     reply = rx.finish()
-                    n_tok = _usage_from_tail(bytes(tail))
-                    how = "模型报的"
-                    if n_tok <= 0:
-                        # ⚠️ 2026-10-05 实测：`/v1/chat/completions` **流式不报 usage**
-                        #    （末行就是 `data: [DONE]`），只有非流式那条才有
-                        #    `usage.prompt_tokens`。而 `/api/chat` 两种都报
-                        #    `prompt_eval_count`。没有信号就**永远不压缩** ⇒ 历史无限涨到
-                        #    超窗（Ollama 会从 token 层中间截断，见 `02` 坑 27）。
-                        #    所以这里按消息长度保守估一个（1.5 tok/字，宁可早压不晚压）。
-                        n_tok = sum(_msg_tokens(m) for m in full_msgs)
-                        how = "按长度估（这条路不报 usage）"
-                    if reply:
-                        full_msgs = full_msgs + [{"role": "assistant", "content": reply}]
-                    # ⚠️ 存进记忆的**不含客户端那条 system**（下一轮它会再发一次）也不含摘要
-                    #    （摘要有自己的字段）。否则每轮都往历史里再叠一份 system 提示词 ——
-                    #    2026-10-05 实测手机那条会话：11 条消息里 **4 条是重复的 system**，
-                    #    占全部字符的 93%（1500 字 ×4），输入 token 从 ~800 涨到 4471，
-                    #    而 35B 有一半在 CPU 上 —— 白烧 prefill、还稀释指令。
-                    store_msgs = _tidy(hist + new_part
-                                       + ([{"role": "assistant", "content": reply}] if reply else []))
-                    self.server.log(
-                        f"会话记忆 | {session_key} | 发 {len(full_msgs)} 条 / "
-                        f"{sum(len(_msg_text(m)) for m in full_msgs)} 字符 | "
-                        f"存 {len(store_msgs)} 条 / "
-                        f"{sum(len(_msg_text(m)) for m in store_msgs)} 字符 | "
-                        f"输入 {n_tok} tok（{how}）| 回复 {len(reply)} 字")
-                    self._remember(session_key, store_msgs, payload.get("model") or "", n_tok)
+                    _mem_commit(reply, bytes(tail))
         except urllib.error.HTTPError as e:
             # ⚠️ 2026-10-18：从 400 放宽到 2000 —— 超窗那条错误体很长，400 字节会把
             #    `n_prompt_tokens` / `n_ctx` 截掉 ⇒ 翻出来的提示里就没数字 ✗
@@ -5637,7 +5791,12 @@ def main() -> int:
     # 用户决定："局域网端的可以不用记忆，就 AstrBot 要记忆压缩就行了，手机端 app 自带记忆"。
     # 于是网关只当"直通的搬运工"：不替客户端记历史、不压缩 —— 历史由客户端/AstrBot 自己管。
     # 想开回来：`--memory`（那次会连带 `--compress-*` 那套一起生效）。
-    srv.session_enabled = bool(args.memory) and not args.no_memory
+    # ⚠️ 2026-10-20 改：拆成"启动意图"和"当前是否生效"两件事 ——
+    #    面板上多了一个记忆开关，运行中就能切，所以 `store` 必须**一直建好**
+    #    （只有 `--no-memory` 才真的不给它路径）；是否记录由 `session_active()` 实时判断 ✓
+    srv.session_flag = bool(args.memory)
+    srv.session_blocked = bool(args.no_memory)
+    srv.session_enabled = session_active(srv)   # 启动那一刻的状态（日志/面板用）
     srv.compress_at = args.compress_at
     srv.keep_tokens = args.keep_tokens
     srv.compress_model = args.compress_model
@@ -5645,7 +5804,7 @@ def main() -> int:
     srv.compress_idle = args.compress_idle
     srv.compress_idle_max = args.compress_idle_max
     srv.session_mode = ("header:" + args.session_header.strip()) if args.session_header.strip() else "ip"
-    srv.store = SessionStore(args.session_file if srv.session_enabled else None)
+    srv.store = SessionStore(None if srv.session_blocked else args.session_file)
     srv._last_compress = {}
     srv._last_chat = 0.0
     srv.search_mode = "off" if args.no_search else args.search_mode
@@ -5708,19 +5867,23 @@ def main() -> int:
           f"（网页上可点按钮切；启动参数 `--think auto|off|on`）")
     print(f"                  （客户端自带 system 时模型会思考，实测 1024 token 全烧在"
           f"推理上、正文返回 0 字）")
-    if not srv.session_enabled:
-        print("    会话记忆    : **关**（默认）—— 网关不替客户端记历史："
-              "手机 App 自带记忆、AstrBot 那条才是记忆/压缩的家")
-        print("                  想开回来：--memory（会连带 --compress-* 那套一起生效）")
-    else:
-        print(f"    会话记忆    : **开**（--memory）—— 超过 {args.compress_at} token "
-              f"就把早期对话压成摘要（保留最近约 {args.keep_tokens}）")
+    # ⚠️ 2026-10-20：现在**网页面板上能切**了，所以这里只报"当前状态 + 三条来源"
+    _mem_now = session_active(srv)
+    print(f"    会话记忆    : {'**开**' if _mem_now else '**关**'}"
+          "（网页面板「🧠 会话记忆」可切；启动参数 --memory 也能开，"
+          "--no-memory 强制关）")
+    if _mem_now:
+        print(f"                  超过 {args.compress_at} token 就把早期对话压成摘要"
+              f"（保留最近约 {args.keep_tokens}）")
         print(f"                  摘要模型 {args.compress_model}"
               + ("（= 跟当前会话同一个，避免把主模型踢出显存）"
                  if args.compress_model.strip().lower() in ("", "same", "@same") else ""))
         print(f"                  摘要等用户停手 {args.compress_idle}s 再跑"
               f"（最多等 {args.compress_idle_max}s）")
         print(f"                  记忆文件 {args.session_file}（_备份\\ 已 gitignore）")
+    else:
+        print("                  （关着时网关只当「直通的搬运工」：手机 App 自带记忆不受影响；"
+              "裸 API 客户端每轮都从零开始）")
     print("\n  ★ 自带网页（可以拿 Key + 当场测对话）：")
     print(f"      本机打开     : http://127.0.0.1:{args.port}/")
     print(f"      别的设备打开 : http://<这台电脑IP>:{args.port}/   （看不到 Key，得在本机取）")

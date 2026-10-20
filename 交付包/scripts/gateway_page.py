@@ -3,7 +3,7 @@
 import datetime
 
 # 网关主页不包含密钥；API Key 只由服务端的 /__key 路由按访问来源决定是否下发。
-PAGE_VER = "2026-10-19-ui1"      # 改页面就改它（服务端与页面共用这一个来源）
+PAGE_VER = "2026-10-20-ui3"      # 改页面就改它（服务端与页面共用这一个来源）
 
 PAGE = """<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
@@ -97,6 +97,15 @@ PAGE = """<!DOCTYPE html>
  @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 </style></head><body><div class="w">
 <h1>助手网关 <span class="badge">本机模型 · 局域网</span></h1>
+<!-- ⚠️ 2026-10-20 加：**点击即自动启动网页聊天台**（11437，独立进程）。
+     链接指向网关自己的 `/chat`：先确保服务在跑，再 302 跳到聊天台 ⇒ 不依赖 JS ✓ -->
+<div class="card" style="border-color:#2f6df6;background:rgba(47,109,246,.10)">
+  <div class="lbl">💬 网页聊天台</div>
+  <div style="margin:6px 0"><a href="<!--SRV:chatlink-->" style="color:#8fb6ff;font-size:15px">
+    👉 打开聊天窗口（点它=**自动启动**；可聊天 / 传文件让它总结 / 换人格卡）</a></div>
+  <div class="hint">独立进程与服务，数据在 <code>E:\\AI聊天台\\</code>，和本网关的手机记忆互不影响。
+    服务没起时，点这个链接会在后台把它拉起来（约 2~5 秒）再跳过去。</div>
+</div>
 <!-- 不需要 JS 的探针②：普通图片，任何会渲染 HTML 的浏览器都会取它 -->
 <img src="/__imgprobe" width="1" height="1" alt="" style="position:absolute;left:-9px;top:-9px">
 <noscript><div class="card" style="border-color:#7a2b2b;background:#2a1414;color:#ffd0d0">
