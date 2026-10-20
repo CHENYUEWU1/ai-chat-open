@@ -953,6 +953,12 @@ SESSION_FILE = Path(r"C:\LocalAI-Assistant\_备份\网关授权设备.json")
 _SESSIONS: dict = {}          # token -> {"ip","ua","first","last"}
 _SESS_LOADED = {"done": False}
 _SESS_DIRTY = {"t": 0.0}
+# ⚠️ 2026-10-20 加：**过期会话自动清理**。
+#    起因（用户实测）：面板「授权设备」堆了 8 条，其中 6 条是测试残留、1 条是半个月前的旧网段会话。
+#    手机**每清一次 cookie / 重装 App / 换浏览器**都会新建一条，旧的不会自己消失。
+#    现在：加载会话表时把"超过 30 天没活动"的清掉；用户现在的设备 last 一直在更新，
+#    不会被误删（本机访问码那条也不在会话表里）✓
+SESSION_TTL = 30 * 24 * 3600
 
 
 def _sessions_load() -> None:
@@ -964,6 +970,18 @@ def _sessions_load() -> None:
             data = json.loads(SESSION_FILE.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 _SESSIONS.update({k: v for k, v in data.items() if isinstance(v, dict)})
+    except Exception:
+        pass
+    # 过期清理（30 天没活动）—— 清完立刻落盘，免得下次又读到 ✓
+    try:
+        cutoff = time.time() - SESSION_TTL
+        stale = [k for k, v in _SESSIONS.items() if float(v.get("last") or 0) < cutoff]
+        for k in stale:
+            _SESSIONS.pop(k, None)
+        if stale:
+            sessions_save(force=True)
+            sys.stderr.write(f"  [授权设备] 自动清掉 {len(stale)} 条超过 30 天没活动的会话\n")
+            sys.stderr.flush()
     except Exception:
         pass
 

@@ -151,6 +151,26 @@ def main() -> int:
         return set(re.findall(r"""name=['"]tok['"] value=['"]([0-9a-f]{8,})['"]""", h))
 
     before = session_tokens()      # ⭐ 快照：这些是用户自己的会话，之后一个都不许动
+
+    # ⚠️ 2026-10-20 加：**兜底清理**（atexit）。
+    #    原来清理写在 main() 末尾 —— 只在本测试**完整跑完**时才执行。
+    #    今晚实测踩到：本测试跑到一半崩（面板渲染坏了 / 网关被我关掉），
+    #    于是每崩一次就在「授权设备」里留下 3 条假设备，堆了 6 条要靠手删。
+    #    注册到 atexit ⇒ 正常结束、异常结束、Ctrl+C 都会清 ✓
+    def _cleanup_sessions():
+        try:
+            left = session_tokens() - before
+            for t in left:
+                get(loc, "/__revoke", data=f"tok={t}".encode())
+            rest = session_tokens() - before
+            if rest:
+                print(f"\n  ⚠️ 兜底清理后仍残留 {len(rest)} 个测试会话（可手动在网页上解除）")
+        except Exception:
+            pass
+
+    import atexit
+    atexit.register(_cleanup_sessions)
+
     print(f"  访问码 = {code}   目标 {lan}")
     print(f"  测试前已有会话 {len(before)} 个（全程不碰它们）\n")
 

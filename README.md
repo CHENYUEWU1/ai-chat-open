@@ -116,13 +116,20 @@ python .\ollama_gateway.py --host 0.0.0.0 --port 11435 --require-key
 
 | 文件或目录 | 用途 |
 | --- | --- |
+| `启动局域网API.bat` | 一键启动：Ollama + 网关（11435）+ 网页聊天台（11437） |
+| `停止模型.bat` | 停止上面三个（按端口停 Python 进程，不会误杀别的 Python） |
 | `ollama_gateway.py` | 网关服务：网页、授权、OpenAI 兼容 API 和 Ollama 请求转发 |
-| `gateway_page.py` | 内置网页界面 |
+| `gateway_page.py` | 网关网页界面（**必须与 `ollama_gateway.py` 同目录**；改页面要一起改 `PAGE_VER`） |
+| `workbench.py` | **网页聊天台**：独立进程（默认 11437），直连 Ollama，聊天 / 传文件 / 人格卡 / 联网搜索 / 导出 |
+| `check_all.py`、`test_access.py`、`smoke_test.py` | 自检与验收脚本（只读巡检、鉴权、冒烟） |
 | `Modelfile.assistant*` | Qwen 3.5 的参数与提示词示例 |
+| `scripts/` | 根目录脚本的同步副本（改脚本改根目录那份） |
 | `plugins/` | AstrBot 可选插件源码 |
 | `部署指南.md` | 从安装 Ollama 到手机接入的完整步骤 |
 | `功能与使用指南.md` | 功能说明和使用限制 |
 | `07-局域网API.md` | 网关接口、授权与安全设置 |
+
+**运行数据不进仓库**：网关状态、授权设备、日志在网关自己的数据目录；网页聊天台的会话、上传文件、人格卡、备份在其数据目录（默认 `%LOCALAPPDATA%\AIWebChat`，可用 `AI_CHAT_DIR` 改）。两者都不参与 Git 与打包。
 
 仓库中的 `.bat` 启动入口按 `C:\LocalAI-Assistant` 下的便携目录配置。按其他路径克隆或解压时，请使用上面的 Python 命令，或先根据部署指南调整启动脚本。AstrBot 相关高级脚本面向特定安装结构，不是通用安装器。
 
