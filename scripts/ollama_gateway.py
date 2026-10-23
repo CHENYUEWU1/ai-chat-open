@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-把本机 Ollama 以**带口令**的方式开放给局域网 —— 只转发聊天，不转发"删模型/拉模型"。
+# ⚠️ 2026-10-22：**这个文件名是历史遗留**（原来叫"Ollama 网关"）。用户已弃用 Ollama，
+#    现在的上游是 **llama.cpp**（见本文件里的 `_llamacpp_serve`）。改名要动 59 处引用，
+#    收益太低，所以保留文件名、只在这里说明 ✓
+
+把本地模型以**带口令**的方式开放给局域网 —— 只转发聊天，不转发"删模型/拉模型"。
 
 为什么需要这一层（为什么不直接把 Ollama 开到局域网）：
     Ollama 的 API **没有任何认证**。只要把 `OLLAMA_HOST` 改成 `0.0.0.0:11434`，
@@ -1768,6 +1772,7 @@ def note_reply(path: str, text: str, raw: bytes, req=None) -> None:
             "got_done": b"[DONE]" in raw,
             "raw_tail": raw[-500:].decode("utf-8", "replace"),
             "msg_tokens": int(LAST_CHAT.get("ptok") or 0),
+            "msg_tokens_unknown": bool(LAST_CHAT.get("ptok_unknown")),
             "ttft": round(float(LAST_CHAT.get("ttft") or 0.0), 2),
             "total": round(float(LAST_CHAT.get("total") or 0.0), 2),
             # ---- 请求侧（判断"谁让它停的"）----
@@ -2584,7 +2589,10 @@ class ReqLog:
 # ⚠️ 摘要提示词里**明确禁编造**，并要求保留"剧情推进 / 人物状态 / 承诺与设定 / 情绪基调"。
 SESSION_DEFAULT = "ip"          # 会话键：ip（默认）或 header:<名字>（客户端可用头区分会话）
 # 摘要模型解析不出来时的兜底（正常情况用"跟当前会话同一个模型"，见 --compress-model）
-DEFAULT_COMPRESS_MODEL = "local-assistant-9b:latest"
+# ⚠️ 2026-10-22：原本是 `local-assistant-9b:latest`。用户已弃用 9B，gguf 与 ollama 模型都删了 ✓
+#    不改的话压缩/摘要会报"模型不存在"——**宁可变慢，不要假装可用**。
+#    代价：35B 有一半专家在 CPU 上，摘要比 9B 慢。
+DEFAULT_COMPRESS_MODEL = "local-assistant-35b:latest"
 COMPRESS_PROMPT = (
     "你是对话记录的压缩器。把下面的对话历史压缩成一段**简洁但信息完整**的中文摘要，"
     "供另一个 AI 继续对话时当作长期记忆使用。\n"
@@ -4365,6 +4373,255 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    # ------------------------------------------------------------------ llama.cpp 上游
+    # ⚠️ 2026-10-22 加：用户决定**只留 llama.cpp**（Ollama 不再启动）。
+    #    网关这一层的价值不变（口令门、API Key、CORS、请求日志、面板），只是把上游换掉：
+    #
+    #    · `/v1/chat/completions` 原样透传（含 `tools`/`tool_calls` —— 实测 llama.cpp 能出
+    #      `finish_reason: tool_calls`，所以 DSH 这类要工具的客户端可以直接切过来）；
+    #    · `/api/chat`、`/api/generate` 是 Ollama 专有协议（AstrBot 这类客户端在用）⇒ **翻译**
+    #      成 OpenAI 请求，再把响应翻回 Ollama 形状，客户端不用改；
+    #    · `/api/tags`、`/api/ps`、`/api/show` 用上游 `/v1/models` 合成；
+    #    · `/api/pull`、`/api/delete` 这类 Ollama 独有的模型管理 ⇒ 501 + 明确原因。
+    #
+    #    ⚠️ 两个坑写在这（都实测过）：llama.cpp 不关思考正文会是空的；它一进程一模型，
+    #       所以 `model` 一律改写成启动时的别名（`-a lc-35b`）。
+    def _llamacpp_base(self) -> str:
+        return f"http://127.0.0.1:{getattr(self.server, 'llamacpp_port', 11450)}"
+
+    def _llamacpp_models(self) -> list:
+        try:
+            with urllib.request.urlopen(self._llamacpp_base() + "/v1/models", timeout=5) as r:
+                d = json.loads(r.read().decode("utf-8", "replace"))
+            return [m for m in (d.get("data") or []) if m.get("id")]
+        except Exception:
+            return []
+
+    def _llamacpp_post(self, path: str, payload: dict, stream: bool, timeout: float = 1800.0):
+        r"""把一份 OpenAI 格式的请求发到 llama.cpp；返回 (status, 响应对象或原始行迭代器)"""
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        req = urllib.request.Request(self._llamacpp_base() + path, data=body,
+                                     headers={"Content-Type": "application/json"})
+        r = urllib.request.urlopen(req, timeout=timeout)
+        if stream:
+            return r.status, r
+        with r:
+            return r.status, r.read()
+
+    def _llamacpp_serve(self, method: str, path: str) -> bool:
+        r"""处理 llama.cpp 上游的请求。返回 True = 已处理完，False = 交给原流程 ✓"""
+        import http.client  # noqa: F401  (保持与本地转发一致的可读性)
+        alias = getattr(self.server, "llamacpp_alias", "lc-35b")
+
+        # ---------- GET：模型列表 / 已加载 ----------
+        if method == "GET" and path in ("/api/tags", "/v1/models", "/api/ps"):
+            models = self._llamacpp_models()
+            if not models:
+                return bool(self._json(503, {"error": f"llama.cpp 没在运行"
+                                                      f"（{self._llamacpp_base()} 无响应）"}))
+            if path == "/v1/models":
+                self._json(200, {"object": "list", "data": [
+                    {"id": alias, "object": "model", "owned_by": "llamacpp",
+                     "created": int(time.time())} for _ in models]})
+                return True
+            if path == "/api/tags":
+                self._json(200, {"models": [
+                    {"name": alias, "model": alias, "modified_at": datetime.datetime.now().isoformat(),
+                     "size": 0,
+                     "details": {"format": "gguf", "family": "qwen",
+                                 "parameter_size": "35B-A3B", "quantization_level": "IQ2_M"}}
+                    for _ in models]})
+                return True
+            self._json(200, {"models": [{"name": alias, "model": alias, "size": 0,
+                                         "digest": "llamacpp", "details": {}} for _ in models]})
+            return True
+
+        if method == "GET" and path == "/api/version":
+            # Ollama 的版本探针，很多客户端（含我们的 test_access）会先打这个。
+            # ⚠️ 2026-10-22（GPT 审查第 3 条）：以前**不检查上游就返回 200** ——
+            #    llama-server 挂了控制台还显示"正常"。现在上游不通就 503 ✓
+            if not self._llamacpp_models():
+                self._json(503, {"error": f"llama.cpp 没在运行（{self._llamacpp_base()}）"})
+                return True
+            self._json(200, {"version": "llama.cpp (upstream)"})
+            return True
+
+        if method == "GET" and path == "/api/show":
+            self._json(200, {"details": {"format": "gguf", "family": "qwen",
+                                         "parameter_size": "35B-A3B",
+                                         "quantization_level": "IQ2_M"},
+                             "template": "", "capabilities": ["tools", "completion"]})
+            return True
+
+        # ---------- POST ----------
+        n = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(n) if n else b""
+        try:
+            body = json.loads(raw.decode("utf-8", "replace")) if raw else {}
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+
+        # 2026-10-22（GPT 审查第 3 条）：llama.cpp 这条路原先绕开了聊天统计，
+        # 面板"最近一次对话 / 首字 / 字数"会一直显示上一轮旧数据 ⇒ 这里补上 ✓
+        # **只记形状（条数、IP、路径），不记正文、不记 Key**。
+        def _note() -> None:
+            try:
+                note_chat(alias, len(body.get("messages") or [body.get("prompt") or ""]),
+                          self.client_address[0],
+                          self.headers.get("User-Agent") or "", path)
+            except Exception:
+                pass
+
+        if path in ("/v1/chat/completions", "/v1/completions"):
+            _note()
+            body["model"] = alias                       # 一进程一模型，名字统一
+            body.setdefault("chat_template_kwargs", {"enable_thinking": False})
+            if body.get("stream"):
+                # 让上游在最后一帧带 usage，否则 prompt_tokens 只能标"不可用" ✓
+                body.setdefault("stream_options", {"include_usage": True})
+            want = body.get("stream") is not False
+            body["stream"] = want
+            return self._llamacpp_relay(path, body, want, openai=True)
+
+        if path in ("/api/chat", "/api/generate"):
+            _note()
+            # Ollama 协议 ⇒ OpenAI 协议
+            if path == "/api/generate":
+                msgs = [{"role": "user", "content": body.get("prompt") or ""}]
+            else:
+                msgs = body.get("messages") or []
+            opts = body.get("options") or {}
+            payload = {"model": alias, "messages": msgs, "stream": bool(body.get("stream", True)),
+                       "chat_template_kwargs": {"enable_thinking": bool(body.get("think")) is True
+                                                and {"enable_thinking": True} or {"enable_thinking": False}}}
+            if opts.get("num_predict"):
+                payload["max_tokens"] = int(opts["num_predict"])
+            if opts.get("temperature") is not None:
+                payload["temperature"] = float(opts["temperature"])
+            if body.get("keep_alive") is not None:
+                pass                                    # llama.cpp 没有 keep_alive，忽略
+            return self._llamacpp_relay("/v1/chat/completions", payload,
+                                        payload["stream"], openai=False)
+
+        if path in ("/api/pull", "/api/delete", "/api/copy", "/api/create", "/api/embeddings",
+                    "/api/embed"):
+            self._json(501, {"error": f"当前上游是 llama.cpp，没有 `{path}` 这个接口。"
+                                      f"模型请直接放 gguf 文件（见 12-网页聊天台.md）。"})
+            return True
+        return False
+
+    def _llamacpp_relay(self, path: str, payload: dict, stream: bool, openai: bool) -> bool:
+        r"""转发并按需把 SSE 翻成 Ollama 的 NDJSON。`openai=True` 时原样透传字节 ✓"""
+        alias = getattr(self.server, "llamacpp_alias", "lc-35b")
+        # 统计（2026-10-22）：只留形状，不碰正文 ✓
+        _t0 = time.time()
+        _first = {"at": 0.0}
+        _chars = {"n": 0}
+        _ptok = {"n": 0, "known": False}      # 2026-10-22：上游给的 prompt_tokens（拿不到就标不可用）
+        try:
+            status, resp = self._llamacpp_post(path, payload, stream)
+        except Exception as e:
+            self._json(502, {"error": f"连不上 llama.cpp（{self._llamacpp_base()}）：{e}"})
+            return True
+        if not stream:
+            try:
+                data = resp if isinstance(resp, bytes) else b"{}"
+                d = json.loads(data.decode("utf-8", "replace") or "{}")
+            except Exception:
+                d = {}
+            _body = ((d.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+            _u = d.get("usage") or {}
+            LAST_CHAT.update({"ttft": 0.0, "total": time.time() - _t0,
+                              "chars": len(_body), "aborted": False, "pending": False,
+                              "ptok": int(_u.get("prompt_tokens") or 0)})
+            if openai:
+                self._json(status, d)
+                return True
+            msg = ((d.get("choices") or [{}])[0].get("message") or {})
+            self._json(200, {"model": alias, "created_at": datetime.datetime.now().isoformat(),
+                             "message": {"role": "assistant",
+                                         "content": msg.get("content") or "",
+                                         "tool_calls": msg.get("tool_calls") or []},
+                             "done": True,
+                             "done_reason": ((d.get("choices") or [{}])[0].get("finish_reason")
+                                             or "stop"),
+                             "eval_count": (d.get("usage") or {}).get("completion_tokens", 0),
+                             "prompt_eval_count": (d.get("usage") or {}).get("prompt_tokens", 0)})
+            return True
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8"
+                         if openai else "application/x-ndjson; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self._cors()
+        self.end_headers()
+        try:
+            for line in resp:                      # 逐行读上游 SSE
+                if not line:
+                    continue
+                if openai:
+                    if not _first["at"]:
+                        _first["at"] = time.time() - _t0
+                    try:
+                        _s = line.decode("utf-8", "replace").strip()
+                        if _s.startswith("data:") and _s[5:].strip() != "[DONE]":
+                            _j = json.loads(_s[5:].strip())
+                            _d = ((_j.get("choices") or [{}])[0].get("delta") or {})
+                            _chars["n"] += len(_d.get("content") or "")
+                            _u = _j.get("usage") or {}
+                            if _u.get("prompt_tokens"):
+                                _ptok["n"] = int(_u["prompt_tokens"])
+                                _ptok["known"] = True
+                    except Exception:
+                        pass
+                    self.wfile.write(line if line.endswith(b"\n") else line + b"\n")
+                    self.wfile.flush()
+                    continue
+                s = line.decode("utf-8", "replace").strip()
+                if not s.startswith("data:"):
+                    continue
+                s = s[5:].strip()
+                if s == "[DONE]":
+                    break
+                try:
+                    j = json.loads(s)
+                except Exception:
+                    continue
+                ch = (j.get("choices") or [{}])[0]
+                delta = (ch.get("delta") or {})
+                if not _first["at"]:
+                    _first["at"] = time.time() - _t0
+                _chars["n"] += len(delta.get("content") or "")
+                out = {"model": alias, "created_at": datetime.datetime.now().isoformat(),
+                       "message": {"role": "assistant",
+                                   "content": delta.get("content") or ""},
+                       "done": False}
+                if delta.get("tool_calls"):
+                    out["message"]["tool_calls"] = delta["tool_calls"]
+                self.wfile.write((json.dumps(out, ensure_ascii=False) + "\n").encode("utf-8"))
+                self.wfile.flush()
+            done = {"model": alias, "created_at": datetime.datetime.now().isoformat(),
+                    "message": {"role": "assistant", "content": ""},
+                    "done": True, "done_reason": "stop"}
+            self.wfile.write((json.dumps(done, ensure_ascii=False) + "\n").encode("utf-8"))
+            self.wfile.flush()
+        except Exception as e:
+            self.server.log(f"[llamacpp] 流式中断：{type(e).__name__}")
+        finally:
+            LAST_CHAT.update({"ttft": round(_first["at"], 3), "total": time.time() - _t0,
+                              "chars": _chars["n"], "aborted": False, "pending": False,
+                              # ⚠️ 拿不到就置 0 并标 unknown —— 绝不沿用上一轮的旧值
+                              "ptok": _ptok["n"] if _ptok["known"] else 0,
+                              "ptok_unknown": not _ptok["known"]})
+            try:
+                resp.close()
+            except Exception:
+                pass
+        return True
+
     def _json(self, code: int, obj) -> None:
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
@@ -4455,6 +4712,12 @@ class Handler(BaseHTTPRequestHandler):
         # 放行：本机、API（/v1/* /api/*）、APK 下载、/__auth 本身。详见上方 ACCESS_* 说明。
         if not self._gate(path):
             return
+        # ---- 上游 = llama.cpp 时，先走专用分流（2026-10-22）----
+        # 不走下面那套 Ollama 专用流水线（洗文本/长度消毒/历史净化/会话记忆都依赖 Ollama 语义）
+        if getattr(self.server, "upstream", "ollama") == "llamacpp" \
+                and (path.startswith("/v1/") or path.startswith("/api/")):
+            if self._llamacpp_serve(method, path):
+                return
         # ---- /__auth：输授权码 ⇒ 种一年期 cookie（之后"永久"不用再输）----
         if path == "/__auth":
             self._do_auth()
@@ -5649,6 +5912,15 @@ def main() -> int:
     ap.add_argument("--host", default="0.0.0.0", help="监听地址（默认 0.0.0.0 = 局域网可达）")
     ap.add_argument("--port", type=int, default=11435, help="监听端口（默认 11435）")
     ap.add_argument("--ollama", default="http://127.0.0.1:11434", help="本机 Ollama 地址")
+    # 2026-10-22：上游切 llama.cpp（用户弃用 Ollama）。`--upstream llamacpp` 时
+    # `/v1/*` 原样透传（含 tools），`/api/chat` 翻译成 OpenAI 再翻回来，`/api/pull|delete` 返回 501。
+    # 2026-10-22：**默认值改成 llamacpp**（用户已弃用 Ollama）。要回 Ollama 得显式写
+    # --upstream ollama，而且得自己把 ollama serve 起起来 ✓
+    ap.add_argument("--upstream", choices=["ollama", "llamacpp"], default="llamacpp",
+                    help="上游引擎（默认 llamacpp；ollama = 只在显式指定时启用）")
+    ap.add_argument("--llamacpp-port", type=int, default=11450, help="llama-server 端口（默认 11450）")
+    ap.add_argument("--llamacpp-alias", default="lc-35b",
+                    help="llama-server 启动时的 -a 别名（请求里的 model 会改写成它）")
     ap.add_argument("--timeout", type=float, default=900.0, help="转发超时秒数（35B 冷启动慢）")
     ap.add_argument("--allow-pull", action="store_true", help="允许 /api/pull 等拉模型接口")
     ap.add_argument("--allow-admin", action="store_true", help="允许 /api/delete 等管理接口（危险）")
@@ -5787,6 +6059,10 @@ def main() -> int:
     srv.token = token
     srv.logger = ReqLog(None if args.no_log else args.log_file)
     srv.ollama = args.ollama.rstrip("/")
+    # 2026-10-22：上游可切到 llama.cpp（用户已弃用 Ollama，见 _llamacpp_serve 的说明）
+    srv.upstream = (getattr(args, "upstream", "ollama") or "ollama").lower()
+    srv.llamacpp_port = int(getattr(args, "llamacpp_port", 11450))
+    srv.llamacpp_alias = getattr(args, "llamacpp_alias", "lc-35b") or "lc-35b"
     srv.timeout = args.timeout
     srv.allow_pull = args.allow_pull
     srv.allow_admin = args.allow_admin

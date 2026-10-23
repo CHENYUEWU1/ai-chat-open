@@ -103,7 +103,7 @@ PAGE = """<!DOCTYPE html>
   <div class="lbl">💬 网页聊天台</div>
   <div style="margin:6px 0"><a href="<!--SRV:chatlink-->" style="color:#8fb6ff;font-size:15px">
     👉 打开聊天窗口（点它=**自动启动**；可聊天 / 传文件让它总结 / 换人格卡）</a></div>
-  <div class="hint">独立进程与服务，数据在 <code>E:\\AI聊天台\\</code>，和本网关的手机记忆互不影响。
+  <div class="hint">独立进程与服务，数据在 <code>E:\\AI助手\\AI聊天台\\</code>，和本网关的手机记忆互不影响。
     服务没起时，点这个链接会在后台把它拉起来（约 2~5 秒）再跳过去。</div>
 </div>
 <!-- 不需要 JS 的探针②：普通图片，任何会渲染 HTML 的浏览器都会取它 -->
@@ -152,9 +152,9 @@ PAGE = """<!DOCTYPE html>
 </div>
 
 <!-- ⚠️ 2026-10-18 加：**手机把文件传给电脑**（纯 HTML 表单 ⇒ 不跑 JS 的浏览器也能用）。
-     存到 `C:\LocalAI-Assistant\聊天文件` 这个目录；`/__upload` 和别的 __ 端点走同一道授权门 ✓ -->
+     存到 `E:\\AI助手\\本地ai\\聊天文件` 这个目录；`/__upload` 和别的 __ 端点走同一道授权门 ✓ -->
 <div class="card" id="upload">
-  <div class="lbl">📎 传文件给电脑（存到 <code>C:\LocalAI-Assistant\聊天文件</code>）</div>
+  <div class="lbl">📎 传文件给电脑（存到 <code>E:\\AI助手\\本地ai\\聊天文件</code>）</div>
   <div class="hint" style="margin:6px 0">选好文件点「上传」；单个文件 ≤ 25 MB。成功后显示保存后的文件名。</div>
   <form method="post" action="/__upload" enctype="multipart/form-data">
     <input type="file" name="f"
@@ -173,7 +173,7 @@ PAGE = """<!DOCTYPE html>
     <span id="ctlmsg" class="hint"></span>
   </div>
   <details class="help"><summary>停止服务会关闭哪些进程？</summary><div class="hint">
-    等于双击 <code>停止模型.bat</code>：停 <b>Ollama</b>（释放显存）+ 清 <b>llama-server 残留</b>
+    等于双击 <code>停止模型.bat</code>：停 <b>llama.cpp</b>（释放内存 9 GB + 显存 7 GB）+ 清残留
     （不杀它会留下占几 GB 内存的孤儿）+ 关 <b>AstrBot</b>。<br>
     ⚠️ <b>连网关自己也一起停</b>：响应发出去后 <b>5 秒</b>结束网关（含别的 ollama_gateway 实例）
     —— 也就是"助手的所有进程都关掉"。这 5 秒是留给你看结果的，之后这个页面会连不上。<br>
@@ -301,7 +301,7 @@ PAGE = """<!DOCTYPE html>
     · <b>联网搜索</b>：默认 <code>auto</code> —— 消息里出现事实/时效词（今天、最新、天气、价格、几点、版本…）网关就先去搜，
     结果里带来源；<b>「搜 / 搜索 / 查一下」开头是强制搜</b>。要"每句都搜"用 <code>--search-mode always</code>。<br>
     · 拉模型 <code>/api/pull</code>、删模型 <code>/api/delete</code> 被网关<b>默认拒绝（403）</b>。<br>
-    · 多人同时用会互相抢显存和内存；手机上想轻快，模型选 <code>local-assistant-9b</code>。
+    · 多人同时用会互相抢显存和内存；手机上想轻快，用<b>网页聊天台</b>（11437），别两边同时长聊。
   </div></details>
 </div>
 </div>
@@ -413,7 +413,7 @@ async function fillPersona(){
     $('pmsg').innerHTML = '<span class="ok">已填入 ' + name + '（' + (d.chars||0) + ' 字）</span>';
   }catch(e){ $('pmsg').innerHTML = '<span class="bad">' + e + '</span>'; }
 }
-let STOPPED = false;               // 助手是否已停（Ollama 不在跑）
+let STOPPED = false;               // 助手是否已停（llama.cpp 不在跑）
 function clearSys(){ $('sys').value = ''; $('pmsg').textContent = '已清空 —— 现在是裸模型'; }
 function showBanner(html, danger){
   const b = $('banner');
@@ -424,19 +424,19 @@ function showBanner(html, danger){
   b.style.color = danger ? '#ffd0d0' : '#cdeed8';
   b.innerHTML = html;
 }
-// 健康检查：Ollama 一停（不管是点上面那个按钮，还是双击 停止模型.bat），
+// 健康检查：llama.cpp 一停（不管是点上面那个按钮，还是双击 停止模型.bat），
 // 这个页面就**停止刷新**并明确显示"已停止" —— 用户报过"网页脚本还在跑、不同步"。
 async function healthTick(){
   let up = false;
   try{ const r = await fetch('/api/version?t=' + Date.now() + '&v=' + PAGE_VER, {cache: 'no-store'}); up = r.ok;
-       pstat('正常（Ollama ' + (up ? '在跑' : '已停止') + '）'); }
+       pstat('正常（llama.cpp ' + (up ? '在跑' : '已停止') + '）'); }
   catch(e){ up = false; pstat('连不上网关：' + e); clientlog('健康检查失败: ' + e); }
   const was = STOPPED; STOPPED = !up;
   if(STOPPED){
-    showBanner('⏹ <b>助手已停止</b>（Ollama 没在跑）。在电脑上双击 <code>启动AstrBot.bat</code> 就能起来，'
+    showBanner('⏹ <b>助手已停止</b>（llama.cpp 没在跑）。在电脑上双击 <code>启动局域网API.bat</code> 就能起来，'
                + '这个页面会在几秒内自动恢复；期间<b>资源面板已暂停刷新</b>。', true);
   } else {
-    if(was) showBanner('✅ 助手又起来了（Ollama 已就绪），面板继续刷新。', false);
+    if(was) showBanner('✅ 助手又起来了（llama.cpp 已就绪），面板继续刷新。', false);
     else showBanner('', false);
     if(was) loadStats();
   }
@@ -477,7 +477,7 @@ async function makeTicket(){
 async function shutdownlocal-assistant(){
   clientlog('点击了 停止模型（Key=' + (TOKEN ? '有' : '没有') + '）');
   if(!TOKEN){ noKeyHint(); return; }
-  if(!confirm('确定要停掉助手吗？\\n\\n停 Ollama（释放显存）+ 清 llama-server 残留 + 关 AstrBot。\\n' +
+  if(!confirm('确定要停掉助手吗？\\n\\n停 llama.cpp（释放内存和显存）+ 清残留 + 关 AstrBot。\\n' +
               '网关和这个页面会留着，并提示"已停止"。')) return;
   ctlSay('正在停…');
   try{
@@ -568,7 +568,7 @@ async function loadModels(){
       o.value = m.name; o.textContent = m.name + '  (' + (m.size/1e9).toFixed(1) + ' GB)'; sel.appendChild(o); });
     $('curl').textContent =
       'curl.exe ' + base + '/v1/chat/completions -H "Authorization: Bearer <KEY>" ^\\n' +
-      '  -H "Content-Type: application/json" -d "{\\"model\\":\\"' + (sel.value||'local-assistant-9b:latest') +
+      '  -H "Content-Type: application/json" -d "{\\"model\\":\\"' + (sel.value||'lc-35b') +
       '\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"你好\\"}]}"';
   }catch(e){ $('smsg').innerHTML = '<span class="bad">拉模型列表失败：' + e + '</span>'; }
 }
@@ -722,8 +722,8 @@ def render_plain_page(st: dict, ok_msg: str = "", page_ver: str = PAGE_VER) -> s
 
 <div class="card">
   <div class="hint" style="margin-bottom:6px">
-    停止模型 ＝ 双击 <code>停止模型.bat</code> 的三步：停 Ollama（释放显存）+
-    清 llama-server 残留 + 关 AstrBot，**并且 5 秒后连网关自己也关掉**
+    停止模型 ＝ 双击 <code>停止模型.bat</code>：清理可能残留的旧 Ollama 进程和 llama-server，
+    关闭 AstrBot，**并且 5 秒后连网关自己也关掉**
     （＝ 用户要的"所有助手进程都关闭"）。这 5 秒是留给你看结果的。<br>
     要重新启动：电脑上双击 <code>启动局域网API.bat</code>（只起网关）或
     <code>启动AstrBot.bat</code>（起对话整套）。<br>

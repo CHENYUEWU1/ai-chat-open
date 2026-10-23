@@ -60,9 +60,9 @@ ROOT_MARKER = "启动AstrBot.bat"
 # 用显式后缀而不是 `*` —— 免得把未来出现的临时文件也镜像进去。
 #
 # 为什么不镜像 .bat 到项目根 `scripts\`：
-#   .bat 里全是硬编码绝对路径（`set "ASTRBOT_ROOT=C:\LocalAI-Assistant\AstrBotData"`、
-#   `"C:\LocalAI-Assistant\astrbot_setup.py"`），从哪个目录双击都一样能跑，
-#   所以 `scripts\启动AstrBot.bat` 是**纯粹的重复文件**，没有存在价值。
+#   启动脚本用 `%~dp0` 按脚本所在目录定位项目文件；复制到 `scripts\` 会改变这个基准目录，
+#   所以项目根 `scripts\` 只放 Python 镜像，不放启动用的 `.bat`。
+#   文档里说到 `.bat` 一律写“在项目根目录双击”，不要从镜像目录启动。
 #   文档里说到 .bat 一律写「双击 `启动AstrBot.bat`」（不带路径前缀）。
 #
 # 但交付包里要带上 .bat —— 那是给"另一台电脑"的，根目录只有 .md 和 README。
@@ -151,7 +151,7 @@ def report(spec: dict, missing, differs, extra) -> None:
 def check() -> int:
     if not (ROOT / ROOT_MARKER).exists():
         print(f"[i] 这里不是项目根（没有 {ROOT_MARKER}），跳过一次性的镜像校验。")
-        print(f"    本脚本只在项目根 E:\\本地ai\\ 下运行；包里的这份是副本，不用跑。")
+        print(f"    本脚本只在项目根运行；交付包里的这份是副本，不用跑。")
         return 0
     bad = False
     for spec in MIRRORS:
@@ -196,7 +196,7 @@ def sync_one(spec: dict) -> None:
 def sync() -> int:
     if not (ROOT / ROOT_MARKER).exists():
         print(f"[i] 这里不是项目根（没有 {ROOT_MARKER}），不动任何文件。")
-        print(f"    本脚本只在项目根 E:\\本地ai\\ 下运行；包里的这份是副本，不用跑。")
+        print(f"    本脚本只在项目根运行；交付包里的这份是副本，不用跑。")
         return 0
     for spec in MIRRORS:
         sync_one(spec)

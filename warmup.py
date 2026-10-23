@@ -1,82 +1,92 @@
 # -*- coding: utf-8 -*-
-r"""开机预热：启动脚本里先把模型读进来、并保温（2026-10-08 加，用户选的"方案 C"）。
+r"""预热脚本（2026-10-22 重写：Ollama 已弃用，改成给 llama.cpp 热身）。
 
-为什么需要它：
-  · 35B 冷启动要约 **30 秒**，而手机 App 的请求超时只有 **20~30 秒**（源码写死）
-    ⇒ 停一会儿再聊，第一条常被掐掉（表现成「发两句话才回一句」）。
-  · Ollama 默认**空闲 5 分钟**就卸载模型。
+现在默认上游是 **llama.cpp**（llama-server 一启动就把模型读进来了，不存在"空闲卸载"），
+所以这个脚本的作用只剩两件：
+  1. 等 llama-server 就绪（它可能还在加载 10.86 GB 的 gguf）；
+  2. 发一条最小请求，把**首次请求要编译的图/CUDA 上下文**提前走一遍
+     （实测首次请求比后续慢 2~10 秒，跑一下能让用户第一次点发送就快）。
 
-这里做的事：等 Ollama 起来 ⇒ 发一个最小请求把模型读进来 ⇒ 带 `keep_alive` 保温
-（实测 **`/api/generate` 认这个字段 ✓**，而 `/v1/chat/completions` 不认 ✗ —— 所以用原生接口）。
-
-想热身的模型换一个：改 `WARM_MODEL`，或 `python warmup.py --model local-assistant-9b:latest`。
-不想用：启动脚本里把那行 `start ... warmup.py` 删掉即可（或 `--quiet` 让输出更少）。
+沿用旧接口：`python warmup.py --quiet`，失败也只打印一行，**不阻塞启动脚本** ✓
 """
 import argparse
 import json
-import sys
 import time
 import urllib.request
 
-WARM_MODEL = "local-assistant-35b:latest"     # 兜底默认；**网页上选过的会优先**（见 _chosen）
-WARM_KEEP_ALIVE = "30m"
-WARM_MODEL_FILE = r"C:\LocalAI-Assistant\_备份\预热模型.txt"     # 网关网页「🔥 开机预热」写的就是它
+LLAMA_BASE = "http://127.0.0.1:11450"
+OLLAMA_BASE = "http://127.0.0.1:11434"
+WARM_MODEL = "lc-35b"
 
 
-def _chosen() -> str:
-    r"""网页上选的模型优先（网关那张卡片点一下就写进这个文件）。"""
+def _get(url: str, timeout: float = 3.0):
+    with urllib.request.urlopen(url, timeout=timeout) as r:
+        return r.read().decode("utf-8", "replace")
+
+
+def _up(base: str) -> bool:
     try:
-        with open(WARM_MODEL_FILE, encoding="utf-8-sig") as f:
-            v = f.read().strip()
-        if v:
-            return v
+        return bool(_get(base + "/v1/models", 2.0))
     except Exception:
-        pass
-    return WARM_MODEL
+        return False
+
+
+def warm_llamacpp(quiet: bool) -> int:
+    t0 = time.time()
+    while time.time() - t0 < 180:
+        if _up(LLAMA_BASE):
+            break
+        if not quiet:
+            print("   …等 llama.cpp 就绪", flush=True)
+        time.sleep(3)
+    else:
+        print("[预热] llama.cpp 180 秒还没就绪，跳过")
+        return 1
+    body = json.dumps({"model": WARM_MODEL, "max_tokens": 8, "stream": False,
+                       "messages": [{"role": "user", "content": "在吗"}],
+                       "chat_template_kwargs": {"enable_thinking": False}}).encode()
+    t1 = time.time()
+    try:
+        req = urllib.request.Request(LLAMA_BASE + "/v1/chat/completions", data=body,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=300) as r:
+            r.read()
+        print(f"[预热] llama.cpp 已热身（{time.time()-t1:.1f} 秒）")
+        return 0
+    except Exception as e:
+        print(f"[预热] 请求失败：{type(e).__name__}（不影响使用）")
+        return 1
+
+
+def warm_ollama(quiet: bool) -> int:
+    r"""老路径：某天又把 Ollama 起回来时才用得到 ✓"""
+    body = json.dumps({"model": "local-assistant-35b:latest", "prompt": "在吗",
+                       "stream": False, "keep_alive": "30m",
+                       "options": {"num_predict": 8}}).encode()
+    try:
+        req = urllib.request.Request(OLLAMA_BASE + "/api/generate", data=body,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=300) as r:
+            r.read()
+        print("[预热] Ollama 已热身（keep_alive 30m）")
+        return 0
+    except Exception as e:
+        print(f"[预热] Ollama 失败：{type(e).__name__}（不影响使用）")
+        return 1
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="")      # 空 = 自动（网页选的 > 常量）
-    ap.add_argument("--keep-alive", default=WARM_KEEP_ALIVE)
-    ap.add_argument("--wait", type=float, default=90.0, help="等 Ollama 起来的秒数上限")
     ap.add_argument("--quiet", action="store_true")
-    args = ap.parse_args()
-
-    if not args.model:
-        args.model = _chosen()
-
-    def say(s):
-        if not args.quiet:
-            print(s, flush=True)
-
-    t0 = time.time()
-    while time.time() - t0 < args.wait:
-        try:
-            with urllib.request.urlopen("http://127.0.0.1:11434/api/version", timeout=2):
-                break
-        except Exception:
-            time.sleep(1.0)
-    else:
-        say("[预热] Ollama 还没起来，跳过（不影响使用）")
-        return 0
-
-    say(f"[预热] 正在把 {args.model} 读进显存…（35B 约 30 秒，9B 约 10 秒）")
-    body = json.dumps({"model": args.model, "prompt": "hi", "stream": False,
-                       "options": {"num_predict": 1},
-                       "keep_alive": args.keep_alive}).encode("utf-8")
-    req = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=body,
-                                 headers={"Content-Type": "application/json"})
-    try:
-        t1 = time.time()
-        with urllib.request.urlopen(req, timeout=900) as r:
-            json.loads(r.read().decode("utf-8", "replace"))
-        say(f"[预热] 好了：用时 {time.time() - t1:.0f} 秒，保温 {args.keep_alive}"
-            f"（这期间聊天不用等冷启动）")
-    except Exception as e:
-        say(f"[预热] 没成功（不影响使用）：{type(e).__name__}")
+    ap.add_argument("--model", default="", help="兼容旧参数，已忽略（llama.cpp 一进程一模型）")
+    a = ap.parse_args()
+    if _up(LLAMA_BASE):
+        return warm_llamacpp(a.quiet)
+    if _up(OLLAMA_BASE):
+        return warm_ollama(a.quiet)
+    print("[预热] 11450 / 11434 都没在跑，跳过（先双击 启动局域网API.bat）")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

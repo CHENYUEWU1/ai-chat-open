@@ -1,4 +1,4 @@
-﻿# 助手人格切换器 —— 交互式菜单
+# 助手人格切换器 —— 交互式菜单
 $ErrorActionPreference = 'Stop'
 $P = 'C:\LocalAI-Assistant\personas'
 $CherryExe = 'C:\LocalAI-Assistant\CherryStudio\Cherry-Studio-CN-portable.exe'

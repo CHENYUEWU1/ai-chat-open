@@ -307,11 +307,12 @@ python scripts\\check_all.py        # 只读校验，不碰 GPU，AstrBot 开着
 只读校验（上面那条）永远不碰 GPU、不会卡。
 
 ```powershell
-python scripts\\fix_ollama.py --check   # 1 秒，只读：Ollama 活不活 + 模型加载了没
-python scripts\\fix_ollama.py           # 复位 Ollama（AstrBot 不用关）
+# 2026-10-22：Ollama 已弃用，fix_ollama.py 已删除；现在是这两条：
+python scripts\\check_all.py             # 只读，不碰 GPU
+python workbench.py --ensure-llama      # 确认 llama.cpp（11450）能起来
 ```
 
-症状：`ollama ps` 挂着不返回、显存里没有模型、脚本"卡住"没有任何输出。
+症状：脚本"卡住"没有任何输出、11450 连不上（llama.cpp 没起来）。
 **卡住超过 2 分钟不要继续等**，直接复位。详见 `06-人格迭代交接.md` §10.5。
 
 ## 文件清单
@@ -358,9 +359,8 @@ python scripts\\fix_ollama.py           # 复位 Ollama（AstrBot 不用关）
 测试分两类，别混（上一轮就是卡在这里）：
 - **每次都跑**：`python scripts\\check_all.py` —— 不碰 GPU、不会卡。
 - **不要自己跑**：`test_persona*.py` / `test_longctx.py` / `test_tools.py` ——
-  要加载 5.6 GB 模型。要跑就先 `python scripts\\fix_ollama.py --check`，
-  再说清楚跑哪个、几个样本，等我说可以；卡住超过 2 分钟就跑
-  `python scripts\\fix_ollama.py` 复位，**不要继续等**。
+  要加载 35B（9.3 GB 内存）。要跑就先确认 llama.cpp 在跑（`python workbench.py --ensure-llama`），
+  再说清楚跑哪个、几个样本，等我说可以；卡住超过 2 分钟就双击 `停止模型.bat` 全停再重启，**不要继续等**。
 
 请从档案第 06 章「人格迭代交接」开始读，读完告诉我你打算先查什么。
 ```

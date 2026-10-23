@@ -1,3 +1,4 @@
+# 2026-10-22 注意：本脚本面向 Ollama（已弃用，用户只留 llama.cpp）。保留作排错参考；跑之前先起 Ollama。
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -42,6 +43,7 @@
    ⚠️ 但反过来：**你在界面里手动新建的 provider，下次跑本脚本会被清掉** ——
    想长期保留就把它加进本文件的 MODELS 表。
 """
+
 import json
 import shutil
 import sqlite3
@@ -459,7 +461,24 @@ def list_models() -> None:
     print("       （换模型**不影响**人格；人格照旧用 --persona / --pick 切）")
 
 
+def _retired_guard() -> None:
+    # 只读模式（--check / --help / --show）**放行**：check_all 的「AstrBot 配置」项靠它体检，
+    # 拦了会让验收变红（2026-10-22 实测）。只有真要写配置时才拦 ✓
+    if any(a in ('--check', '-h', '--help', '--show') for a in sys.argv[1:]):
+        return
+    # 2026-10-22 停用保护：本脚本会写 **Ollama 提供商**（11434 + 旧模型名），但 Ollama 已弃用、
+    # 连 11434 都不在了 ⇒ 直接跑会把 AstrBot 指向一个不存在的服务。
+    # 必须显式 --i-know-ollama-is-gone 才放行；正确做法是改 AstrBot 的 OpenAI 兼容提供商。
+    _RETIRED = '--i-know-ollama-is-gone'
+    if _RETIRED not in sys.argv:
+        print('[停用] astrbot_setup.py 面向已弃用的 Ollama。现在的做法是：')
+        print('  AstrBot 服务提供商改成 OpenAI 兼容 → http://127.0.0.1:11435/v1，模型名 lc-35b。')
+        print(f'  确实要按老办法写 Ollama 配置，请加参数 {_RETIRED}。')
+        raise SystemExit(2)
+
+
 def main() -> int:
+    _retired_guard()          # 2026-10-22：Ollama 已弃用，见函数里的说明
     global MODEL_ID, MODEL_NAME, MODEL_NUM_CTX, MODEL_REPLY_RESERVE, CONTEXT_TOKENS
     args = sys.argv[1:]
 

@@ -177,7 +177,8 @@ def main() -> int:
     print("① 未授权：只能看到「输授权码」，看不到任何数据")
     st, h, _ = get(lan, "/")
     check("GET / 有输入框", "需要授权" in h and 'name="code"' in h)
-    check("没泄露模型名", "local-assistant-35b" not in h and "local-assistant-9b" not in h)
+    # 2026-10-22：模型名断言跟着后端走（现在是 lc-35b；Ollama 时期是 local-assistant-35b/local-assistant-9b）
+    check("没泄露模型名", "lc-35b" not in h and "local-assistant-35b" not in h and "local-assistant-9b" not in h)
     check("没泄露人格名", "示例角色A" not in h and "外向-助手" not in h)
     check("没泄露入网码", code not in h)
     check("没泄露设备表", "已授权设备" not in h and "生成手机授权码" not in h)
@@ -206,7 +207,11 @@ def main() -> int:
     ckA = f"gw_auth={tok}"
     st, h, _ = get(lan, "/", cookie=ckA)
     check("带 cookie 进控制台", "需要授权" not in h and "访问授权" in h)
-    check("带 cookie 看得到模型名", "local-assistant-35b" in h or "local-assistant-9b" in h)
+    # 2026-10-22（GPT 复核）：页面的模型下拉是 JS 从 /api/tags 填的，HTML 里本来就没有模型名 ⇒
+    # 断言改到**接口**上：带 cookie 请求 /api/tags，必须能拿到当前实际别名 lc-35b ✓
+    st_t, body_t, _ = get(lan, "/api/tags", cookie=ckA)
+    check("带 cookie 从 /api/tags 拿到当前模型 lc-35b", st_t == 200 and "lc-35b" in body_t,
+          f"HTTP {st_t} {body_t[:60]}")
 
     print("\n④ 退出授权 / 伪造 cookie")
     st, _, hdrs = get(lan, "/__auth?out=1", cookie=ckA)

@@ -27,6 +27,7 @@ import re
 import secrets
 import shutil
 import sqlite3
+import subprocess
 import sys
 import threading
 import time
@@ -63,7 +64,7 @@ OLLAMA = os.environ.get("AI_CHAT_OLLAMA") or "http://127.0.0.1:11434"
 HOST = os.environ.get("AI_CHAT_HOST") or "0.0.0.0"
 PORT = int(os.environ.get("AI_CHAT_PORT") or 11437)
 
-DEFAULT_MODEL = "local-assistant-35b:latest"
+DEFAULT_MODEL = "lc-35b"
 CTX_TOKENS = 65536          # 模型真实窗口（Modelfile num_ctx）
 RESERVE_OUT = 4096          # 给输出预留
 RESERVE_SYS = 1200          # 给人设/时间行预留
@@ -270,6 +271,314 @@ def ollama_models() -> list[str]:
         return []
 
 
+# ---------------------------------------------------------------- 上游后端（Ollama / llama.cpp）
+# ⚠️ 2026-10-22 加：网页聊天台支持切到 llama.cpp（BeeLlama CUDA 13.3，sm_120 原生内核）。
+#
+# **实测数据**（同一台机器、同一个 gguf，2026-10-21 晚）：
+#   · 35B：Ollama 42 tok/s、预填充 ~320 tok/s；llama.cpp(--n-cpu-moe 24) 46.9 tok/s、预填充 722（2.25 倍）
+#   · 9B ：Ollama 33.5 tok/s；llama.cpp(-c 8192) 39.2 tok/s、预填充 1655
+#
+# **两个坑（都实测踩过，别重犯）**：
+#   1) llama.cpp 会把 `<think>` 内容切到 `reasoning_content`，正文变成**空的**
+#      （finish_reason=length、content=""，token 全烧在思考里）⇒ 每次请求必须带
+#      `chat_template_kwargs.enable_thinking=False`（或 reasoning_effort=none）；
+#   2) 8 GB 卡上**千万别用 `--fit on`**：它把显存塞到 7612 MB 就开始抖动，只有 3.9 tok/s。
+#      必须显式 `--n-cpu-moe`：35B 用 24 最好（46.9），26 次之（43.3），20 以下会掉到 14。
+#
+# 另外：一进程一模型，所以 35B / 9B 各占一个端口；**切回来会自动停掉 llama-server 释放内存**
+# （16 GB 内存同时加载两个模型会爆 —— 35B 就要 9.3 GB RSS）。
+LLAMA_BIN = Path(os.environ.get("AI_CHAT_LLAMA_BIN") or r"C:\LocalAI-Assistant\llama.cpp\bee\bin")
+LLAMA_EXE = LLAMA_BIN / "llama-server.exe"
+# 上下文档位 → 每档对应的 `--n-cpu-moe`（**必须成对调**，因为显存会撑爆）：
+#   实测（2026-10-21/22，35B IQ2_M，fa on，KV q8_0）：
+#     32k + ncmoe 20 → 52.5 tok/s、预填充 884（最快，VRAM 7573）
+#     32k + ncmoe 24 → 46.4 tok/s、预填充 766（VRAM 6742）
+#     32k + ncmoe 18 → 18.8 tok/s、预填充 59  ← **显存临界，开始抖动，别用**
+#     64k + ncmoe 24 → 46.9 tok/s、预填充 722（VRAM 7143）
+#   规律：上下文越小 → KV 越省 → 能塞更多专家上显卡（ncmoe 越小）→ 越快。
+LLAMA_CTX_OPTIONS = (8192, 16384, 32768, 65536)
+LLAMA_CTX_NCMOE = {8192: 20, 16384: 20, 32768: 20, 65536: 24}
+LLAMA_CTX_DEFAULT = 32768
+CTX_FILE = DATA / "llamacpp_ctx.txt"
+LLAMA_MODELS = {
+    "lc-35b": {
+        "label": "llama.cpp · 35B",
+        "port": 11450,
+        "gguf": os.environ.get("AI_CHAT_GGUF_35B")
+                or r"C:\LocalAI-Assistant\downloads\Qwen3.6-35B-A3B-Uncensored-IQ2_M.gguf",
+        # 只放"跟上下文无关"的参数；`-c` 和 `--n-cpu-moe` 由档位算出来（见 llama_args）
+        "base_args": ["-ngl", "99", "--parallel", "1", "-fa", "on",
+                      "-ctk", "q8_0", "-ctv", "q8_0"],
+    },
+}
+# ⚠️ 2026-10-22：`lc-9b` 已删除（用户弃用 9B，gguf 与 ollama 模型都清了）。
+#    只剩 35B 一个 llama.cpp 目标 ⇒ 不用在模型间倒内存，切换只涉及一个进程 ✓
+#    如果哪天又加回来：端口别撞（11450/11451），`--n-cpu-moe` 要重新调，别忘了关思考那个坑。
+BACKEND_FILE = DATA / "backend.txt"
+_LLAMA_PROCS: dict = {}          # mid -> subprocess.Popen（只记自己起的，不认别人起的）
+
+
+def read_backend() -> str:
+    r"""当前上游固定为 `lc-35b`；旧状态文件中的 Ollama 值会被纠正。
+
+    ⚠️ 2026-10-22：默认从 `ollama` 改成 **`lc-35b`**（用户已只留 llama.cpp）。
+    原来默认 ollama 会害死启动流程：启动脚本先把 llama.cpp 拉起来（19 秒），
+    紧接着工作台启动时读到"后端=ollama" ⇒ 它的孤儿回收把 11450 **当孤儿杀掉** ⇒
+    每次启动都白加载一遍（用户反馈"每次启动都好久"就是这么来的）✓
+    """
+    try:
+        v = BACKEND_FILE.read_text(encoding="utf-8").strip()
+    except Exception:
+        v = ""
+    if v in LLAMA_MODELS:   # 2026-10-22 只留 llama.cpp：写着 ollama 也纠正成 lc-35b
+        return v
+    return "lc-35b" if LLAMA_MODELS else "ollama"
+
+
+def write_backend(v: str) -> None:
+    try:
+        BACKEND_FILE.write_text(v, encoding="utf-8")
+    except Exception:
+        pass
+
+
+def llama_base(mid: str) -> str:
+    return f"http://127.0.0.1:{LLAMA_MODELS[mid]['port']}"
+
+
+def read_ctx() -> int:
+    r"""当前选的上下文档位（持久化）✓ 只认白名单里的值，坏文件回默认。"""
+    try:
+        v = int(CTX_FILE.read_text(encoding="utf-8").strip())
+    except Exception:
+        v = 0
+    return v if v in LLAMA_CTX_OPTIONS else LLAMA_CTX_DEFAULT
+
+
+def write_ctx(v: int) -> None:
+    try:
+        CTX_FILE.write_text(str(int(v)), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def llama_args(mid: str, ctx: int) -> list:
+    r"""按档位算出启动参数：`-c <ctx>` 与 `--n-cpu-moe` **成对**给（见上面的实测表）✓"""
+    ctx = ctx if ctx in LLAMA_CTX_OPTIONS else LLAMA_CTX_DEFAULT
+    return ["-c", str(ctx), "--n-cpu-moe", str(LLAMA_CTX_NCMOE.get(ctx, 24))] + \
+           list(LLAMA_MODELS[mid].get("base_args") or [])
+
+
+def llama_up(mid: str) -> bool:
+    try:
+        with urllib.request.urlopen(llama_base(mid) + "/health", timeout=2) as r:
+            return b'"ok"' in r.read() or r.status == 200
+    except Exception:
+        return False
+
+
+def llama_spawn(mid: str) -> tuple:
+    r"""起 llama-server（已经在跑就直接用）✓ 返回 (ok, 说明)"""
+    cfg = LLAMA_MODELS[mid]
+    if llama_up(mid):
+        log(f"llama.cpp {mid} 已在 {cfg['port']} 运行，直接复用")
+        return True, "已经在运行"
+    if not LLAMA_EXE.exists():
+        return False, f"找不到 {LLAMA_EXE}（可用环境变量 AI_CHAT_LLAMA_BIN 指定目录）"
+    if not Path(cfg["gguf"]).exists():
+        return False, f"找不到模型文件 {cfg['gguf']}"
+    try:
+        # ⚠️ 2026-10-22：必须 `DETACHED_PROCESS`（0x8）。
+        #    `--ensure-llama` 是"起完就退出"的短命进程；只给 CREATE_NO_WINDOW 时，
+        #    父进程一退、或父进程被包在任务/控制台里关掉，llama-server 会跟着被收走
+        #    （实测：脚本打印"已启动（8s）"，但几秒后 11450 就没了、进程也不见了）。
+        creation = 0x00000008 | (0x08000000 if os.name == "nt" else 0)      # DETACHED_PROCESS|CREATE_NO_WINDOW
+        p = subprocess.Popen(
+            [str(LLAMA_EXE), "-m", cfg["gguf"], "--host", "127.0.0.1",
+             "--port", str(cfg["port"]), "-a", mid] + llama_args(mid, read_ctx()),
+            cwd=str(LLAMA_BIN), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=creation)
+        _LLAMA_PROCS[mid] = p
+    except Exception as e:
+        return False, f"启动失败 {type(e).__name__}"
+
+    # 进度可见：加载 10.86 GB 的 gguf 要 8~30 秒，不打点会像卡死（用户反馈"每次启动好久"）
+    t0 = time.time()
+    last_tick = 0
+    while time.time() - t0 < 150:
+        if llama_up(mid):
+            log(f"llama.cpp {mid} 就绪（{time.time()-t0:.0f}s）")
+            return True, f"已启动（{time.time()-t0:.0f}s）"
+        if p.poll() is not None:
+            return False, "进程立刻退出了（显存/内存不够？看日志）"
+        tick = int(time.time() - t0)
+        if tick and tick % 5 == 0 and tick != last_tick:
+            last_tick = tick
+            print(f"   …模型加载中 {tick}s（读 10.86 GB gguf，正常 8~30 秒）", flush=True)
+        time.sleep(1.0)
+    return False, "启动超时（150 秒）"
+
+
+def llama_reap() -> int:
+    r"""杀掉孤儿 llama-server（2026-10-22 修）。
+
+    **为什么需要**：`_LLAMA_PROCS` 只在同一进程里有效。工作台一重启（或崩溃），之前 Popen 出来的
+    llama-server 就成孤儿继续占着 6~9 GB 内存 —— 实测过一次 `llama-server 6.8 GB` +
+    `Ollama 11.9 GB` 同时驻留，16 GB 机器直接开始换页。
+
+    **怎么认**：按**端口**认（11450/11451 是这套 llama.cpp 专用的），不用按 exe 名字或路径 ——
+    ① Ollama 自己的 runner 也叫 `llama-server.exe`，按名字会误杀；
+    ② 用 PowerShell 那句 `StartsWith(...,'OrdinalIgnoreCase')` 穿过 cmd/python 的引号层会被吃掉
+       （实测报 `A positional parameter cannot be found`），netstat 解析反而稳。
+    """
+    ports = {str(cfg["port"]) for cfg in LLAMA_MODELS.values()}
+    pids = set()
+    creation = 0x08000000 if os.name == "nt" else 0
+    try:
+        out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True,
+                             timeout=25, creationflags=creation).stdout
+        for line in out.splitlines():
+            if "LISTENING" not in line.upper():
+                continue
+            cols = line.split()
+            if len(cols) < 5:
+                continue
+            local, pid = cols[1], cols[-1]
+            if local.rsplit(":", 1)[-1] in ports and pid.isdigit():
+                pids.add(pid)
+    except Exception:
+        return 0
+    killed = 0
+    for pid in pids:
+        try:
+            subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True,
+                           timeout=20, creationflags=creation)
+            killed += 1
+        except Exception:
+            pass
+    if killed:
+        log(f"回收孤儿 llama-server {killed} 个（按端口，释放内存）")
+    return killed
+
+
+def llama_stop_all() -> None:
+    r"""停掉 llama-server：先杀自己起的，再扫一遍本目录的孤儿 ✓"""
+    for mid, p in list(_LLAMA_PROCS.items()):
+        try:
+            p.kill()
+        except Exception:
+            pass
+        _LLAMA_PROCS.pop(mid, None)
+        log(f"llama.cpp {mid} 已停（释放内存）")
+    llama_reap()
+
+
+def ollama_unload_all() -> None:
+    r"""让 Ollama 卸载已加载模型（切到 llama.cpp 前腾内存）✓ keep_alive=0 是官方卸载手法"""
+    try:
+        with urllib.request.urlopen(OLLAMA + "/api/ps", timeout=5) as r:
+            d = json.loads(r.read().decode("utf-8", "replace"))
+        for m in (d.get("models") or []):
+            name = m.get("name") or m.get("model")
+            if not name:
+                continue
+            body = json.dumps({"model": name, "keep_alive": 0}).encode()
+            req = urllib.request.Request(OLLAMA + "/api/generate", data=body,
+                                         headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=20).read()
+            log(f"已让 Ollama 卸载 {name}（腾内存给 llama.cpp）")
+    except Exception:
+        pass
+
+
+def backend_state() -> dict:
+    cur = read_backend()
+    # 2026-10-22（GPT 复核第 4 条）：**不再问 11434**。Ollama 不在了，原来每次状态请求
+    # 都要等 10 秒超时 ⇒ 网页聊天台打开时明显变慢。现在只报 llama.cpp ✓
+    ollama = []
+    items = []
+    for mid, cfg in LLAMA_MODELS.items():
+        items.append({"id": mid, "label": cfg["label"], "port": cfg["port"],
+                      "up": llama_up(mid), "gguf": Path(cfg["gguf"]).name})
+    return {"current": cur, "ollama": {"up": bool(ollama), "models": ollama},
+            "llama": items, "llama_bin_ok": LLAMA_EXE.exists(),
+            "ctx": read_ctx(), "ctx_options": list(LLAMA_CTX_OPTIONS)}
+
+
+def set_ctx(v: int) -> tuple:
+    r"""改上下文档位：正在用 llama.cpp 就**重启**它（`-c` 只能启动时给）✓"""
+    if v not in LLAMA_CTX_OPTIONS:
+        return False, "不支持的上下文档位"
+    write_ctx(v)
+    cur = read_backend()
+    if cur in LLAMA_MODELS:
+        llama_stop_all()
+        ok, msg = llama_spawn(cur)
+        return (ok, f"上下文改成 {v}（llama.cpp 已重启：{msg}）") if ok \
+            else (False, f"重启失败：{msg}")
+    return True, f"上下文已设为 {v}（下次切到 llama.cpp 时生效）"
+
+
+def switch_backend(target: str) -> tuple:
+    r"""当前只允许启用已配置的 llama.cpp 模型。返回 (ok, 说明)。"""
+    if target not in LLAMA_MODELS:
+        return False, "当前只配置了 llama.cpp 35B"
+    current = read_backend()
+    if current in LLAMA_MODELS and current != target:
+        llama_stop_all()
+    ok, msg = llama_spawn(target)
+    if not ok:
+        return False, msg
+    write_backend(target)
+    log(f"上游切到 {target}")
+    return True, f"已切到 {LLAMA_MODELS[target]['label']}：{msg}"
+
+
+def llamacpp_stream(mid: str, messages: list, max_tokens: int, conv_id: str):
+    r"""流式转发 llama.cpp 的 `/v1/chat/completions`（OpenAI 格式，SSE）✓
+
+    ⚠️ `chat_template_kwargs.enable_thinking=False` 不能省 —— 否则正文全空（见文件头注释）。
+    """
+    payload = {
+        "model": mid, "messages": messages, "stream": True,
+        "max_tokens": max_tokens, "temperature": 0.8,
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    req = urllib.request.Request(
+        llama_base(mid) + "/v1/chat/completions",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=1800) as r:
+        for raw in r:
+            if _STOP.get(conv_id):
+                return
+            line = raw.decode("utf-8", "replace").strip()
+            if not line.startswith("data:"):
+                continue
+            body = line[5:].strip()
+            if body == "[DONE]":
+                yield "", True, {}
+                return
+            try:
+                d = json.loads(body)
+            except Exception:
+                continue
+            ch = (d.get("choices") or [{}])[0]
+            piece = ((ch.get("delta") or {}).get("content")) or ""
+            fin = bool(ch.get("finish_reason"))
+            yield piece, fin, d
+            if fin:
+                return
+
+
+def chat_stream(model: str, messages: list, num_predict: int, conv_id: str):
+    r"""当前只配置 llama.cpp；模型别名由 read_backend() 统一决定。"""
+    cur = read_backend()
+    if cur not in LLAMA_MODELS:
+        raise RuntimeError("当前没有可用的 llama.cpp 模型")
+    return llamacpp_stream(cur, messages, num_predict, conv_id)
+
+
 def search_messages(cid: str, qs: str, limit: int = 50) -> list[dict]:
     r"""在当前会话里按关键词找旧消息（LIKE 足够；个人数据量不需要 FTS5）✓
     用途：超过上下文预算的旧对话**不会永远取不回** —— 能搜到、看到来自第几条 ✓"""
@@ -383,7 +692,8 @@ def import_personas_from_dir() -> int:
 
 
 # ---------------------------------------------------------------- 上下文组装
-def assemble(conversation_id: str, user_text: str, persona_id: str) -> tuple[list, int, bool, int]:
+def assemble(conversation_id: str, user_text: str, persona_id: str,
+             long_mode: bool = False) -> tuple[list, int, bool, int]:
     r"""组装这一轮要发的消息：人设 + 最近原文 + 本轮输入。
 
     返回 (messages, 估算token, 是否因超预算截了历史, 预算)。
@@ -393,8 +703,19 @@ def assemble(conversation_id: str, user_text: str, persona_id: str) -> tuple[lis
        现在按 token 预算从最近往前装（能装多少装多少），旧内容用
        `/wc/api/search` 关键词取回。只影响"这一轮带多少"，**不删任何存档** ✓
     """
-    budget = CTX_TOKENS - RESERVE_OUT - RESERVE_SYS
+    # ⚠️ 2026-10-22：预算跟着**后端**走 —— llama.cpp 的窗口是我们按档位起的（8k~64k），
+    #    按 65536 装 60k 令牌再发给 8k 窗口的 llama-server 会直接报上下文溢出 ✓
+    #    同理，输出预留也要缩放：8k 窗口里预留 4096 会白白吃掉一半上下文（实测只剩 2896 可用）
+    # ⚠️ 2026-10-22 改：**预留按实际情况算**，不再固定扣 4096+1200。
+    #    原来不管勾不勾长文模式都留 4096、不选人格也扣 1200 ⇒ 16k 档白丢约 3.2k。
+    #    现在：日常留 NORMAL_REPLY_TOKENS(2048)、长文留 MAX_REPLY_TOKENS(4096)；
+    #    没选人格卡就不扣人设预留。小窗口(8k)仍按 1/4 缩放，免得输出预留吃掉一半 ✓
+    window = read_ctx() if read_backend() in LLAMA_MODELS else CTX_TOKENS
+    want_out = MAX_REPLY_TOKENS if long_mode else NORMAL_REPLY_TOKENS
+    reserve_out = want_out if window >= want_out * 3 else max(1024, window // 4)
     sys_text = persona_body(persona_id).strip()
+    reserve_sys = RESERVE_SYS if sys_text else 0
+    budget = window - reserve_out - reserve_sys
     head = []
     if sys_text:
         head.append({"role": "system", "content": sys_text})
@@ -624,6 +945,11 @@ PAGE = """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
  .quiet-button,.mobile-menu{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:5px 9px;border:1px solid transparent;border-radius:9px;background:transparent;color:#62665e;font-size:12px;white-space:nowrap}
  .quiet-button:hover,.mobile-menu:hover{background:var(--soft);color:#292c27}
  .mobile-menu{display:none}
+ .engine-badge{display:inline-flex;align-items:center;gap:6px;background:var(--green-soft);color:var(--pri);border:1px solid #137a6433;border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:600}
+ .engine-badge::before{content:'●';font-size:10px;opacity:.85}
+ .engine-badge.off{background:#f2f0ea;color:#8a8b82;border-color:#e0ded4}
+ .engine-badge.off::before{content:'○'}
+ .ctx-info{font-size:12.5px;color:var(--dim);white-space:nowrap}
  .status-note{min-width:0;margin-left:auto;color:#9a741e;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .dim{color:var(--dim);font-size:11px}
  #stat{padding:3px 8px;border-radius:20px;background:#f3f4f1;color:#777a72;white-space:nowrap}
@@ -672,7 +998,12 @@ PAGE = """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
    .select-label{gap:4px}
    .top select{max-width:38vw;height:32px;padding:4px 22px 4px 7px;font-size:11px}
    .mode-toggle{font-size:11px}
-   .status-note{width:100%;margin:0;white-space:normal;line-height:1.35}
+   .engine-badge{display:inline-flex;align-items:center;gap:6px;background:var(--green-soft);color:var(--pri);border:1px solid #137a6433;border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:600}
+ .engine-badge::before{content:'●';font-size:10px;opacity:.85}
+ .engine-badge.off{background:#f2f0ea;color:#8a8b82;border-color:#e0ded4}
+ .engine-badge.off::before{content:'○'}
+ .ctx-info{font-size:12.5px;color:var(--dim);white-space:nowrap}
+ .status-note{width:100%;margin:0;white-space:normal;line-height:1.35}
    .msgs{padding:17px 14px 20px}
    .msgs:empty:before{font-size:22px}
    .m{margin:11px auto}
@@ -764,10 +1095,18 @@ PAGE = """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
     <div class="top-settings">
       <label class="select-label">模型 <select id="model"></select></label>
       <label class="select-label">人格 <select id="persona" onchange="savePersona()"></select></label>
-      <label class="mode-toggle"><input type="checkbox" id="long"><span>长文模式</span></label>
+            <span class="engine-badge" id="engineBadge" title="推理引擎：llama.cpp 35B（Ollama 已于 2026-10-22 弃用）">llama.cpp · 35B</span>
+    <select id="ctx" onchange="setCtx(this.value)" title="llama.cpp 的上下文长度：越大越能吃长文，但显存更紧、专家要更多放 CPU（更慢）">
+      <option value="8192">8k 上下文</option>
+      <option value="16384">16k 上下文</option>
+      <option value="32768">32k 上下文</option>
+      <option value="65536">64k 上下文</option>
+    </select>
+    <label class="mode-toggle"><input type="checkbox" id="long"><span>长文模式</span></label>
     <label class="mode-toggle" title="勾上 = 这次回答前先联网搜索；也可以直接用「搜 / 查一下」开头"><input type="checkbox" id="net"><span>🌐 联网</span></label>
       <button class="quiet-button" onclick="regenerate()">↻ <span>重新生成</span></button>
       <button class="quiet-button" onclick="showHelp()" title="这个网页能做什么 / 三种用法的区别">? <span>说明</span></button>
+      <span class="ctx-info" id="ctxinfo" title="本轮实际用掉的上下文 / 预算"></span>
       <span class="status-note" id="note"></span>
     </div>
   </div>
@@ -959,7 +1298,7 @@ function showHelp(){
     '② 手机 App（11435 /v1）：记忆由 App 自己发；网关会洗文本（App 不渲染 markdown）；受 App 硬编码「最多5个短句/15-50字」限制。',
     '③ DSH 干活（11435 /v1 + 干活档）：记忆由 DSH 自己带；必须保留工具调用、逐字原样，适合让它读写文件跑命令。',
     '',
-    '① 直连 Ollama 11434，完全不经过网关；②③ 才走 11435。三者互不影响。'
+    '① 网页聊天台直连 llama.cpp 11450；②③ 经网关 11435。记忆由各自客户端管理。'
   ].join('\\n');
   openModal({title:'说明', text:t, ok:'知道了',
     onOk:function(){ closeModal(); }, onCancel:function(){ closeModal(); }});
@@ -1029,7 +1368,7 @@ async function regenAt(mid){
   if(!(await askConfirm('重新生成','会删掉这一条问答**及其后所有消息**，用同一句提问重跑。'))) return;
   const b=addBubble('assistant',''); b.classList.add('typing'); scroll();
   await streamFrom('/wc/api/regenerate',{c:CUR,mid:mid,persona:$('persona').value,
-    model:$('model').value,long:$('long').checked}, b);
+    model:curModel(),long:$('long').checked}, b);
   await loadMsgs();
 }
 async function editAt(mid, oldText){
@@ -1037,7 +1376,7 @@ async function editAt(mid, oldText){
   if(!t) return;
   const b=addBubble('assistant',''); b.classList.add('typing'); scroll();
   await streamFrom('/wc/api/edit',{c:CUR,id:mid,text:t,persona:$('persona').value,
-    model:$('model').value,long:$('long').checked}, b);
+    model:curModel(),long:$('long').checked}, b);
   await loadMsgs();
 }
 function copyText(s,btn){
@@ -1057,13 +1396,67 @@ async function loadPersonas(){ const r=await api('/wc/api/personas'); const d=aw
   (d.items||[]).forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.textContent=p.name; $('persona').appendChild(o); }); }
 async function impP(){ const r=await api('/wc/api/personas/import',{method:'POST'}); const d=await r.json();
   toast('导入 '+(d.n||0)+' 个人格卡'); await loadPersonas(); }
+let ENGINE='lc-35b';
+async function loadBackends(){
+  // 2026-10-22：只剩 llama.cpp，没有引擎切换了；这个函数现在只做两件事：
+  //   ① 把上下文档位同步到下拉；② 更新"引擎徽标"的状态点（运行中/未启动）
+  try{
+    const r=await api('/wc/api/backends'); const d=await r.json();
+    ENGINE='lc-35b';
+    if(d.ctx){ $('ctx').value=String(d.ctx); }
+    const lc=(d.llama||[])[0]||{};
+    const badge=$('engineBadge');
+    if(badge){
+      if(lc.up){
+        badge.className='engine-badge';
+        badge.textContent='llama.cpp · 35B';
+        badge.title='运行中：端口 '+lc.port+'；上下文 '+d.ctx;
+      } else {
+        badge.className='engine-badge off';
+        badge.textContent='llama.cpp · 35B（未启动）';
+        badge.title='未启动：发第一条消息会自动拉起，约 10~30 秒';
+      }
+    }
+    // llama.cpp 一进程一模型 ⇒ 模型下拉没意义，藏掉
+    if($('model')){ $('model').style.display='none'; }
+  }catch(e){}
+}
+// 2026-10-22：setEngine 已删（引擎下拉去掉，只留 llama.cpp）
+function curModel(){ return 'lc-35b'; }
+async function setCtx(v){
+  // 2026-10-22 修：原来只有 toast（3 秒就消失），而重启 llama.cpp 要 10~40 秒 ⇒
+  // 手机上看起来"点了没反应"。现在改成：下拉变灰 + 顶部常驻状态，直到真的切换完 ✓
+  if(window.__switching){ return; }
+  window.__switching=true;
+  const sel=$('ctx');
+  const old=Number(v);
+  if(sel){ sel.disabled=true; }
+  HINT.note='⏳ 正在切到 '+(old/1024)+'k 上下文：重启 llama.cpp 并重新加载模型，约 10~40 秒…';
+  showHint();
+  toast('正在切到 '+(old/1024)+'k 上下文…');
+  try{
+    const r=await api('/wc/api/llama_ctx',{method:'POST',body:JSON.stringify({ctx:old})});
+    const d=await r.json();
+    HINT.note=d.ok ? ('✅ 上下文已切到 '+(old/1024)+'k') : ('❌ '+(d.message||'切换失败'));
+    toast(d.message||'已设置');
+  }catch(e){
+    HINT.note='❌ 切换失败：'+e;
+    toast('设置失败：'+e);
+  }
+  showHint();
+  if(sel){ sel.disabled=false; }
+  window.__switching=false;
+  loadBackends();
+  // 3 秒后把常驻状态清掉（免得一直挂着）
+  setTimeout(function(){ HINT.note=''; showHint(); }, 3000);
+}
 async function loadModels(){
   try{
     const r=await api('/wc/api/models'); const d=await r.json();
-    const items=(d.items&&d.items.length)?d.items:['local-assistant-35b:latest'];
+    const items=(d.items&&d.items.length)?d.items:['lc-35b'];
     $('model').innerHTML='';
     items.forEach(function(n){ var o=document.createElement('option'); o.value=n; o.textContent=n; $('model').appendChild(o); });
-  }catch(e){ $('model').innerHTML='<option>local-assistant-35b:latest</option>'; }
+  }catch(e){ $('model').innerHTML='<option>lc-35b</option>'; }
 }
 async function searchHist(){
   if(!CUR){ toast('先选一个会话'); return; }
@@ -1093,10 +1486,10 @@ function renderAtt(){
 }
 let HINT={note:'',ctx:null};
 function showHint(){
-  var s=[];
-  if(HINT.ctx) s.push('上下文 '+HINT.ctx.pct+'%（'+HINT.ctx.used+'/'+HINT.ctx.budget+' tok）');
-  if(HINT.note) s.push(HINT.note);
-  $('note').textContent=s.join(' · ');
+  // 2026-10-22 修：上下文用量单独一块（#ctxinfo），和状态提示（#note）互不覆盖 ——
+  // 之前两者挤在同一个 span 里，'llama.cpp 运行中' 把 '上下文 12%' 顶掉了（用户反馈）✓
+  $('ctxinfo').textContent = HINT.ctx ? ('上下文 '+HINT.ctx.pct+'%（'+HINT.ctx.used+'/'+HINT.ctx.budget+' tok）') : '';
+  $('note').textContent = HINT.note || '';
 }
 function quick(t){ $('txt').value=t; $('txt').focus(); }
 function exportMd(){ if(!CUR) return;
@@ -1136,7 +1529,7 @@ async function regenerate(){
   if(!(await askConfirm('重新生成','会删掉最后一轮问答，用同一句提问重跑。\\n更早的历史不动。'))) return;
   const b=addBubble('assistant',''); scroll();
   await streamFrom('/wc/api/regenerate',{c:CUR,persona:$('persona').value,
-    model:$('model').value,long:$('long').checked}, b);
+    model:curModel(),long:$('long').checked}, b);
 }
 async function maybeAutoTitle(text){
   // 会话标题还是默认的"新对话"时，用第一句话给它起个名（像常见聊天软件）
@@ -1159,7 +1552,7 @@ async function send(){
   const att=ATT.map(function(x){ return x.id; }); ATT=[]; renderAtt();
   await maybeAutoTitle(t);
   await streamFrom('/wc/api/chat',{c:CUR,text:t,persona:$('persona').value,
-    model:$('model').value,long:$('long').checked,search:$('net').checked,attachments:att}, b);
+    model:curModel(),long:$('long').checked,search:$('net').checked,attachments:att}, b);
 }
 $('txt').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); } });
 // 手机上键盘弹起会盖住输入区：聚焦时把它滚进可视区，键盘尺寸变化后再滚到底 ✓
@@ -1167,7 +1560,7 @@ $('txt').addEventListener('focus',function(){ setTimeout(function(){ try{ $('txt
 if(window.visualViewport){
   window.visualViewport.addEventListener('resize',function(){ try{ scroll(); }catch(e){} });
 }
-loadConvs(); loadPersonas(); loadModels();
+loadConvs(); loadPersonas(); loadModels(); loadBackends();
 </script></body></html>"""
 
 PLAIN = """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
@@ -1296,8 +1689,14 @@ class H(BaseHTTPRequestHandler):
             return self._json({"error": "unauthorized"}, 403)
 
         if p == "/wc/api/models":
-            # B2：模型列表由服务端去问 Ollama（手机端浏览器碰不到 11434）
-            return self._json({"items": ollama_models()})
+            # 2026-10-22（GPT 审查第 5 条）：原来**只会问 11434**，Ollama 一停就返回空，
+            # 前端退回写死的旧模型名。现在按当前后端给：llama.cpp 一进程一模型 ⇒ 就它自己 ✓
+            cur = read_backend()
+            items = [cur] if cur in LLAMA_MODELS else []
+            return self._json({"items": items})
+        if p == "/wc/api/backends":
+            # 上游状态：当前用哪个、Ollama 有哪些模型、llama.cpp 起没起 ✓
+            return self._json(backend_state())
         if p == "/wc/api/search":
             qs = self.path.split("?", 1)[1] if "?" in self.path else ""
             m_q = re.search(r"(?:^|&)q=([^&]*)", qs)
@@ -1442,6 +1841,23 @@ class H(BaseHTTPRequestHandler):
         if p == "/wc/api/stop":
             _STOP[body.get("c") or ""] = True
             return self._json({"ok": True})
+        if p == "/wc/api/backend":
+            # 切上游：`ollama` / `lc-35b` / `lc-9b`；切到 llama.cpp 会先让 Ollama 卸载模型腾内存 ✓
+            target = (body.get("target") or "").strip()
+            st, msg = switch_backend(target)
+            out = backend_state()
+            out.update({"ok": st, "message": msg})
+            return self._json(out, 200 if st else 400)
+        if p == "/wc/api/llama_ctx":
+            # 改上下文档位（8k/16k/32k/64k）；正在用 llama.cpp 会重启它 ✓
+            try:
+                v = int(body.get("ctx") or 0)
+            except Exception:
+                v = 0
+            ok, msg = set_ctx(v)
+            out = backend_state()
+            out.update({"ok": ok, "message": msg})
+            return self._json(out, 200 if ok else 400)
         if p == "/wc/api/chat":
             return self._chat_stream(body)
         return self._json({"error": "not found"}, 404)
@@ -1531,12 +1947,12 @@ class H(BaseHTTPRequestHandler):
     def _chat_blocking(self, cid, text, persona, model, long_mode) -> str:
         r"""无 JS 路径：整段返回。**也落库**，和流式共用一份逻辑 ✓"""
         self._ensure_conv(cid)
-        msgs, _used, _tr, _bud = assemble(cid, text, persona)
+        msgs, _used, _tr, _bud = assemble(cid, text, persona, long_mode)
         self._save_msg(cid, "user", text)
         got = []
         try:
             with _GEN_LOCK:
-                for piece, done, d in ollama_stream(model or DEFAULT_MODEL, msgs,
+                for piece, done, d in chat_stream(model or DEFAULT_MODEL, msgs,
                                                     MAX_REPLY_TOKENS if long_mode else NORMAL_REPLY_TOKENS,
                                                     cid):
                     got.append(piece)
@@ -1640,8 +2056,17 @@ class H(BaseHTTPRequestHandler):
         # 落库的正文**不存整份附件**（避免库暴涨），只留指令 + 附件名
         store_text = text + (f"\n\n[附件：{names}]" if names else "")
 
+        # ---- 上游就绪检查（2026-10-22）----
+        # 选了 llama.cpp 但进程没起（例如重启过电脑）⇒ 在这里**自动拉起**，
+        # 免得用户看到"发消息没反应"。首次加载 35B 要 ~30 秒，页面上的"正在输入"会一直转 ✓
+        cur_backend = read_backend()
+        if cur_backend in LLAMA_MODELS and not llama_up(cur_backend):
+            _ok, _msg = llama_spawn(cur_backend)
+            if not _ok:
+                return self._json({"error": f"llama.cpp 起不来：{_msg}"}, 500)
+
         self._ensure_conv(cid)
-        msgs, used, truncated, budget = assemble(cid, prompt_text, persona)
+        msgs, used, truncated, budget = assemble(cid, prompt_text, persona, long_mode)
         if search_txt:
             # 搜索结果塞进**第一条 system**（人设后面），搜不到就说搜不到，别让模型编 ✓
             if msgs and (msgs[0].get("role") or "") == "system":
@@ -1681,9 +2106,9 @@ class H(BaseHTTPRequestHandler):
         t0 = time.time()
         try:
             with _GEN_LOCK:
-                for piece, done, d in ollama_stream(model, msgs,
-                                                    MAX_REPLY_TOKENS if long_mode else NORMAL_REPLY_TOKENS,
-                                                    cid):
+                for piece, done, d in chat_stream(model, msgs,
+                                                  MAX_REPLY_TOKENS if long_mode else NORMAL_REPLY_TOKENS,
+                                                  cid):
                     if piece:
                         got.append(piece)
                         emit({"delta": piece})
@@ -1710,8 +2135,26 @@ def port_in_use(port: int, host: str = "127.0.0.1") -> bool:
 
 
 def main() -> int:
+    # 2026-10-22：`--ensure-llama` = 只负责把 llama-server 拉起来（给启动脚本用）。
+    # **为什么放这儿**：llama.cpp 的启动参数只有这一份（含 `--n-cpu-moe` 与上下文档位的绑定），
+    #  bat/网关都不该再抄一遍 —— 抄了就一定会和这里漂移 ✓
+    if "--ensure-llama" in sys.argv:
+        init_env()
+        ok, msg = llama_spawn("lc-35b")
+        if not ok:
+            # 2026-10-22 实测：上一次停服务后显存释放有延迟，紧接着起会"进程立刻退出"。
+            # 启动脚本里多等一次，比让用户看到一个空窗口好 ✓
+            print(f"[llama.cpp] 第一次没起来（{msg}），10 秒后重试…")
+            time.sleep(10)
+            ok, msg = llama_spawn("lc-35b")
+        print(("[llama.cpp] " + msg) if ok else ("[llama.cpp] 失败：" + msg))
+        return 0 if ok else 1
     init_env()
     t = token()
+    # 2026-10-22：启动先回收孤儿 llama-server —— 上次崩溃/重启留下的会白占 6~9 GB 内存；
+    # 只有当前后端是 llama.cpp 时才保留（那种情况下孤儿反而可以复用）
+    if read_backend() not in LLAMA_MODELS:
+        llama_reap()
     # ⚠️ 2026-10-20：**已经在跑就安静退出**（启动脚本/面板"点一下就起"可能重复触发）✓
     if port_in_use(PORT):
         print(f"网页聊天台已在运行：http://127.0.0.1:{PORT}/wc?k={t}（本次启动跳过）")
@@ -1722,7 +2165,7 @@ def main() -> int:
     print(f"    数据目录   : {DATA}")
     print(f"    数据库     : {DB_PATH}")
     print(f"    监听       : {HOST}:{PORT}")
-    print(f"    转发到     : {OLLAMA}（本机 Ollama，不经过网关）")
+    print("    转发到     : http://127.0.0.1:11450（llama.cpp，本机直连）")
     print(f"    口令       : {t}")
     print(f"    本机打开   : http://127.0.0.1:{PORT}/wc?k={t}")
     print(f"    手机打开   : http://<电脑IP>:{PORT}/wc?k={t}")
@@ -1734,6 +2177,10 @@ def main() -> int:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        # 2026-10-22：聊天台退出时把**自己起的** llama-server 一起收掉，
+        # 否则 35B 那 9 GB 内存会一直挂着（用户以为关了网页就完事了）
+        llama_stop_all()
     return 0
 
 

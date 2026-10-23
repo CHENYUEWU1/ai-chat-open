@@ -8,11 +8,11 @@ echo   停止 助手 · 本地 AI 助手
 echo ==================================================
 echo.
 
-echo [1/4] 停止 Ollama 推理服务（释放显存）...
+echo [1/4] 停止 Ollama（2026-10-22 起默认不启动；有残留就顺手清掉）...
 taskkill /F /IM ollama.exe >nul 2>&1
 if errorlevel 1 (echo       没有正在运行的服务) else (echo       已停止)
 
-echo [2/4] 清理 llama-server 子进程（释放内存）...
+echo [2/4] 停止 llama.cpp（llama-server.exe，释放 9 GB 内存 + 7 GB 显存）...
 REM ★ 关键：ollama.exe 被杀掉后，它拉起的 llama-server.exe 不会跟着死，
 REM   会继续占着好几 GB 内存。实测见过两个孤儿占 7.5 GB，
 REM   把 15.7 GB 的系统内存吃到只剩 2 GB，然后所有东西都开始卡。

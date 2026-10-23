@@ -1,3 +1,4 @@
+# 2026-10-22 注意：本脚本面向 Ollama（已弃用，用户只留 llama.cpp）。保留作排错参考；跑之前先起 Ollama。
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""关掉 WebUI 的「内联 HTML 卡片」（ChatUI HTML GenUI）。

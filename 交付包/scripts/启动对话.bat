@@ -1,69 +1,45 @@
 @echo off
 chcp 936 >nul
-title 本地 AI 助手 - 助手（无审查版）
+title 本地 AI 助手 - 网页聊天台
 setlocal
 
-set "OLLAMA_MODELS=C:\LocalAI-Assistant\models"
-set "OLLAMA_FLASH_ATTENTION=1"
-set "OLLAMA_KV_CACHE_TYPE=q8_0"
-set "OLLAMA_HOST=127.0.0.1:11434"
-
 REM ============================================================
-REM  2026-09-29 加：模型菜单（原来模型名写死在最后一行，没法切）
-REM  这份 .bat 必须存成 GBK + CRLF（见 02 坑 5）；
-REM  分支一律用 goto，别把 goto 写进括号块内部（见 02 坑 16）。
+REM  2026-10-22 重写：**不再用 Ollama**（用户只留 llama.cpp，9B 已删）。
+REM  这个脚本原来是"终端里 ollama run 聊天"，现在改成：
+REM     1) 起 llama.cpp 35B（11450，参数只在 workbench.py 里有一份）
+REM     2) 起网页聊天台（11437）
+REM     3) 打开浏览器
+REM  文件必须 GBK + CRLF（见 02 坑 5）。
 REM ============================================================
+
 echo ============================================
-echo    本地 AI 助手 - 助手
-echo ============================================
-echo.
-echo   选模型：
-echo.
-echo     1) 9B    Qwen3.5-9B-Uncensored   快，全在显存，第一条约 1 秒
-echo     2) 35B   Qwen3.6-35B-A3B         更聪明，第一条要等 30-60 秒
-echo     3) 退出
-echo.
-set "pick="
-set /p "pick=输入编号（1/2/3），直接回车=1 : "
-if "%pick%"=="2" goto use35b
-if "%pick%"=="3" goto quit
-goto use9b
-
-:use9b
-set "MODEL=local-assistant-9b"
-set "MTEXT=Qwen3.5-9B-Uncensored"
-goto start_ollama
-
-:use35b
-set "MODEL=local-assistant-35b"
-set "MTEXT=Qwen3.6-35B-A3B (MoE)"
-goto start_ollama
-
-:quit
-echo.
-echo 已退出。
-goto end
-
-:start_ollama
-echo.
-REM 若服务未运行则启动
-tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul
-if not errorlevel 1 goto ready
-echo [启动] Ollama 服务...
-start "" /B "C:\LocalAI-Assistant\ollama\ollama.exe" serve
-ping -n 7 127.0.0.1 >nul
-
-:ready
-echo ============================================
-echo    本地 AI 助手 - 助手
-echo    模型: %MTEXT%
+echo    本地 AI 助手 - 网页聊天台
 echo ============================================
 echo.
-echo [就绪] 直接打字聊天，输入 /bye 退出
-if "%MODEL%"=="local-assistant-9b" echo [提示] 已关闭思考模式，响应约 1 秒
-if not "%MODEL%"=="local-assistant-9b" echo [提示] 35B 第一条要读提示，等 30-60 秒是正常的
-echo.
-"C:\LocalAI-Assistant\ollama\ollama.exe" run %MODEL% --think=false
 
-:end
+echo [1/3] 启动 llama.cpp 35B（约 10~30 秒，会打印"模型加载中 Ns"）...
+python "%~dp0workbench.py" --ensure-llama
+if errorlevel 1 (
+    echo    [失败] llama.cpp 没起来，看上面的提示；网页仍可打开，但发消息会报错。
+)
+
+echo [2/3] 启动网页聊天台（11437）...
+start "webchat" /min python "%~dp0workbench.py"
+
+echo [3/3] 等它就绪再打开浏览器 ...
+set /a n=0
+:wait
+ping -n 2 127.0.0.1 >nul
+set /a n+=1
+if %n% gtr 20 goto openany
+curl -s -o nul --max-time 2 http://127.0.0.1:11437/wc
+if errorlevel 1 goto wait
+
+:openany
+explorer "http://127.0.0.1:11437/wc"
+
+echo.
+echo 已启动。关掉网页不会停服务；要全部停止请双击「停止模型.bat」。
+echo 本窗口 5 秒后自动关闭...
+ping -n 6 127.0.0.1 >nul
 endlocal

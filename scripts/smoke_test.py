@@ -112,6 +112,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=11436)
     ap.add_argument("--no-chat", action="store_true", help="跳过真发一条聊天")
+    # 2026-10-22（GPT 复核）：**默认只验收 llama.cpp**。要测 Ollama 必须显式指定，
+    # 否则会出现"打印退回 Ollama、但网关其实还按 llamacpp 起"的错测。
+    ap.add_argument("--upstream", choices=["llamacpp", "ollama"], default="llamacpp",
+                    help="验收哪个上游（默认 llamacpp）")
     ap.add_argument("--timeout", type=float, default=60.0, help="等实例起来的秒数")
     args = ap.parse_args()
     base = f"http://127.0.0.1:{args.port}"
@@ -119,10 +123,15 @@ def main() -> int:
     print("=" * 62)
     print("  冒烟测试：重构之后必须还能用的东西")
     print("=" * 62)
+    # 当前默认验收 llama.cpp；只有显式 --upstream ollama 才访问旧后端。
     ollama_up = port_open(11434)
-    ps_start = api_ps() if ollama_up else ""      # 跑之前加载的是谁（跑完要对照，见 4.5）
-    if not ollama_up:
-        print("  ⚠️ Ollama（11434）没在跑 ⇒ 依赖它的检查会**跳过**（不算失败）。")
+    llama_up = port_open(11450)
+    # 只认**选定的**上游，不再"哪个通就用哪个"
+    upstream_ok = llama_up if args.upstream == "llamacpp" else ollama_up
+    ps_start = api_ps() if args.upstream == "ollama" and ollama_up else ""
+    if not upstream_ok:
+        selected = "llama.cpp 11450" if args.upstream == "llamacpp" else "Ollama 11434"
+        print(f"  ⚠️ 所选上游（{selected}）没在运行 ⇒ 依赖它的检查会跳过。")
         print("     想跑完整测试：先双击 启动局域网API.bat 再跑本脚本 ✓")
 
     # ── 0 静态检查（不需要起服务）─────────────────────────────
@@ -149,8 +158,22 @@ def main() -> int:
     if port_open(args.port):
         print(f"  ⚠️ 端口 {args.port} 已在被占用，先关掉它再跑（避免误测别的实例）")
         return 2
+    # 网关测试实例必须显式使用所选上游，不能依据端口状态自动切换。
+    extra = []
+    # 2026-10-22（GPT 复核）：上游由 `--upstream` 决定，**不再自动退回**。
+    if args.upstream == "llamacpp":
+        extra = ["--upstream", "llamacpp", "--llamacpp-port", "11450"]
+        if llama_up:
+            print("  上游：llama.cpp（11450 通）")
+        else:
+            print("  ⚠️ llama.cpp（11450）没在跑：聊天相关项会**明确跳过**（不算通过）。")
+            print("     想跑完整测试：先双击 启动局域网API.bat（或 python workbench.py --ensure-llama）")
+    else:
+        extra = ["--upstream", "ollama"]
+        if not ollama_up:
+            print("  ⚠️ 指定了 --upstream ollama，但 11434 没在跑：聊天相关项会跳过。")
     proc = subprocess.Popen(
-        [sys.executable, str(ROOT / "ollama_gateway.py"), "--port", str(args.port)],
+        [sys.executable, str(ROOT / "ollama_gateway.py"), "--port", str(args.port)] + extra,
         stdout=(ROOT / "_备份" / "smoke_out.txt").open("wb"),
         stderr=(ROOT / "_备份" / "smoke_err.txt").open("wb"),
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
@@ -197,7 +220,7 @@ def main() -> int:
         # ── 3 接口 & 按钮（只读 + 幂等 POST）───────────────
         for path in ("/api/version", "/api/tags", "/__stats", "/__peek?n=1"):
             depends = path in ("/api/version", "/api/tags")     # 这两条是转发给 Ollama 的
-            if depends and not ollama_up:
+            if depends and not upstream_ok:
                 skip(f"{path} 可访问", "Ollama 没在跑")
                 continue
             try:
@@ -231,21 +254,17 @@ def main() -> int:
 
         # ── 4 真发一条聊天 ─────────────────────────────────
         #
-        # ⚠️⚠️ **这里绝对不能写死模型名**（原先是 "local-assistant-9b:latest"，2026-10-11 修）。
-        #   原因：启动脚本设了 `OLLAMA_MAX_LOADED_MODELS=1` —— 本测试只要加载了 9B，
-        #   Ollama 就会把用户**刚预热好的 35B 卸载掉**，于是用户下一条消息要重读模型
-        #   （35B 冷启动实测 16~38 秒），现象就是"怎么卡住了 / 是不是坏了" ✗
-        #   冒烟测试的职责是**验证**，不是改变用户现场 ⇒ 一律**优先用已经加载的那个模型**：
-        #     ① `/api/ps` 里已加载的（用户自己拉起、或开机预热拉起的那个）
-        #     ② 一个都没加载 ⇒ 读 `_备份\预热模型.txt`（网页上选的预热目标）
-        #     ③ 再没有 ⇒ 才退回默认 "local-assistant-9b:latest"
-        preheat = cur("预热模型.txt", "")
+        # 当前默认走 llama.cpp；Ollama 仅保留给显式指定旧上游的兼容验收。
+        # Ollama 兼容模式要尽量复用已加载模型，避免验收时改变用户现场。
+        preheat = cur("预热模型.txt", "") if args.upstream == "ollama" else ""
         if args.no_chat:
             print("  ℹ️ --no-chat：跳过「真发一条聊天」（不会动你加载的模型）", flush=True)
-        elif not ollama_up:
-            skip("真发一条聊天能拿到正文", "Ollama 没在跑")
+        elif not upstream_ok:
+            skip("真发一条聊天能拿到正文", "上游没在跑")
         else:
-            chat_model = ps_start or preheat or "local-assistant-9b:latest"
+            # 现在只有 lc-35b（llama.cpp 一进程一模型）；Ollama 模式下才用 ps/预热名
+            chat_model = ("lc-35b" if args.upstream == "llamacpp"
+                          else (ps_start or preheat or "lc-35b"))
             if not preheat or chat_model == preheat:
                 print(f"  ℹ️ 本次聊天用的模型 = {chat_model}（预热的是 {preheat or '未设置'}）",
                       flush=True)
@@ -289,7 +308,7 @@ def main() -> int:
     # ── 4.5 温和回归提醒：本测试有没有把你的模型顶掉（**不判失败**）──────
     #     只在"跑之前已经加载着模型"时才真的有话可说 —— 那是用户的预热成果。
     #     不判失败的理由：本脚本验的是**页面/接口**，显存里是谁不该让它变红 ✓
-    if ollama_up:
+    if args.upstream == "ollama" and ollama_up:
         ps_end = api_ps()
         if not ps_start:
             print(f"  ℹ️ 跑之前没有模型加载；跑完加载的是 {ps_end or '(无)'}（正常，不算失败）",

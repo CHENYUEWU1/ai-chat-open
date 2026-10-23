@@ -3,7 +3,7 @@
 """
 交付包路径批量替换工具。
 
-把包里所有写死的 `E:\\本地ai` 改成新的安装路径。
+把包里所有写死的 `E:\\AI助手\\本地ai` 改成新的安装路径。
 
 关键点：包里三种编码混用，必须按扩展名用对应编码读写，否则会把文件写坏：
     .bat        → GBK (cp936)          中文 Windows 的 cmd 只认这个
@@ -92,7 +92,7 @@ def main() -> int:
     if args:
         new_base = args[0].rstrip("\\/")
     else:
-        print(f"\n当前写死的路径是: E:\\本地ai")
+        print(f"\n当前写死的路径是: E:\\AI助手\\本地ai")
         print("如果你的安装目录不同，请输入新路径（直接回车 = 保持不变）：")
         new_base = input("> ").strip().rstrip("\\/")
 
@@ -104,7 +104,7 @@ def main() -> int:
         print("\n新路径与原来相同，无需修改。")
         return 0
 
-    print(f"\n将把  E:\\本地ai  替换为  {new_base}")
+    print(f"\n将把  E:\\AI助手\\本地ai  替换为  {new_base}")
     if dry:
         print("【预览模式】不会真的修改文件\n")
     else:
